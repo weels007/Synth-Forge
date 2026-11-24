@@ -292,18 +292,22 @@ process; the browser has no estimator, so the deploy script publishes the snapsh
 
 ## Frontend
 
-The dashboard is one document with two densities. The six rooms are mounted together inside one
-deck, so pressing a room slides the next leaf in from the side instead of replacing the page: the
-rail, the masthead and the wallet keep their place, and only the leaf moves. The URL still names
-the leaf you are on, so every room can be linked to and reloaded; `←` and `→` walk the deck, and
-the double-rule foot prints `03 / 06` beside the two ways onward. Same bone paper, same ink
-hairlines, same serif voice and mono figures throughout, so moving from the cover to the ledger
-reads as turning a leaf rather than leaving the product. Only the density changes - the cover
-breathes and the desk is packed.
+The dashboard is one document with two densities. Both route groups sit on one animated field -
+three slow chromatic fields drifting behind a coordinate grid that pans - built in CSS alone, with
+no canvas, no images and no JavaScript, and it stops entirely under `prefers-reduced-motion`.
+Everything above it is smoked glass: translucent panels, hairline borders, mint for what is
+settled, copper for what needs attention, rose for what failed. The six rooms are mounted together
+inside one deck, so pressing a room slides the next leaf in from the side instead of replacing the
+page: the rail, the masthead and the wallet keep their place, and only the leaf moves. The URL
+still names the leaf you are on, so every room can be linked to and reloaded; `←` and `→` walk the
+deck, and the hairline foot prints `03 / 06` beside the two ways onward. Same field, same glass,
+same serif voice and mono figures throughout, so moving from the cover to the ledger reads as
+turning a leaf rather than leaving the product. Only the density changes - the cover breathes and
+the desk is packed.
 
 | Route | Leaf | What it is for |
 | --- | --- | --- |
-| `/` | cover | the printed prospectus: what the instrument is, the live certificate, the limits |
+| `/` | cover | the instrument: what it claims, the live certificate, the honest limits |
 | `/vault` | room | NAV, positions, book policy, mark-to-market, fund/redeem |
 | `/strategies` | room | the register of drafts, one draft in full, propose a new one |
 | `/proofs` | room | the ledger, filterable, with the evidence behind each row |
@@ -325,7 +329,7 @@ scripts/wallet.mjs                keystore loader for deployers and test actors
 scripts/fetchFonts.mjs            re-downloads the dashboard fonts (latin subsets)
 deploy/deployScript.ts            deploy + seed + read-back verification
 deploy/e2eScript.ts               generate → execute → mark → challenge → reopen, prints proofs
-frontend/                         Next.js dashboard: one dossier - cover leaf + a six-leaf deck
+frontend/                         Next.js dashboard: one instrument - cover leaf + a six-leaf deck
 docs/ARCHITECTURE.md              why the contract is shaped this way
 docs/LICENSE                      MIT
 ```

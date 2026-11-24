@@ -11,7 +11,7 @@ const ORDER = ["STRATEGY_APPROVAL", "REBALANCE", "MARK", "CHALLENGE", "REOPEN", 
 function verdictTone(verdict: string): "ok" | "bad" | "warn" | "mute" {
   if (verdict === "UPHOLD") return "ok";
   if (verdict === "REVOKE") return "bad";
-  if (verdict === "ACCEPTED" || verdict === "EXECUTED") return "warn";
+  if (verdict === "ACCEPTED" || verdict === "EXECUTED") return "ok";
   return "mute";
 }
 

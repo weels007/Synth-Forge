@@ -278,10 +278,12 @@ frame; only the active leaf is in flow, the rest wait off to the side, and chang
 translates the deck sideways in 380 ms. The rail and the masthead are part of the frame, so they
 never re-render away. Each room is still a real URL: the deck is driven by the pathname, so a
 bookmarked room opens directly on its leaf, the back button walks the same leaves, and `←` / `→`
-do it from the keyboard. They share the cover's substrate on purpose - the same bone paper, ink
-hairlines, engraved section rules, serif voice for headings and mono for every number - so
-following the rail reads as turning a leaf, not as arriving in a different product. What changes
-between them is density, not identity: the cover breathes, the desk is packed.
+do it from the keyboard. They share the cover's substrate on purpose: one ambient field behind both
+groups (three drifting chromatic fields over a panning grid, pure CSS, halted under
+`prefers-reduced-motion`), the same smoked-glass surfaces, the same serif voice for headings and
+mono for every number. Following the rail therefore reads as turning a leaf, not as arriving in a
+different product. What changes between them is density, not identity: the cover breathes, the
+desk is packed.
 
 The address is resolved from `frontend/public/deployment.json`, written by the deploy script.
 `NEXT_PUBLIC_SYNTHFORGE_ADDRESS` is only a fallback, so the console cannot keep reading an older

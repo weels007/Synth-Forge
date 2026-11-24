@@ -1,12 +1,33 @@
 /*
- * Shared floor for both route groups. The cover and the console disagree about
- * colour on purpose; they agree about type, because it is one product.
+ * Shared floor for both route groups. The cover and the console are the same
+ * instrument at two densities: one palette, one set of faces, one ambient field
+ * behind both. Tokens live here so neither stylesheet can drift.
  */
 
 :root {
+  color-scheme: dark;
+
   --serif: "Instrument Serif", "Iowan Old Style", Palatino, Georgia, serif;
   --sans: "Instrument Sans", -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  /* the field: near-black blue-green, read through smoked glass */
+  --s-bg: #070e11;
+  --s-bg-2: #0a1418;
+  --s-surface: rgba(13, 24, 28, 0.72);
+  --s-surface-2: rgba(17, 30, 35, 0.6);
+  --s-line: rgba(198, 228, 222, 0.14);
+  --s-line-strong: rgba(198, 228, 222, 0.3);
+  --s-text: #e9f2ef;
+  --s-dim: #a7bbb6;
+  --s-faint: #7b918d;
+  --s-mint: #5fe0ac;
+  --s-copper: #e9a06b;
+  --s-rose: #ff8298;
+  --s-ice: #7fb6ff;
+  --s-gold: #e2c789;
+  --s-radius: 14px;
+  --s-glow: 0 0 22px rgba(95, 224, 172, 0.22);
 }
 
 *,
@@ -22,6 +43,8 @@ body {
 }
 
 body {
+  background: var(--s-bg);
+  color: var(--s-text);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -31,5 +54,6 @@ a {
 }
 
 ::selection {
-  background: #c9c0a6;
+  background: rgba(95, 224, 172, 0.28);
+  color: #f2fbf7;
 }

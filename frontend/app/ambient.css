@@ -1,0 +1,101 @@
+/*
+ * The field behind both route groups.
+ *
+ * It is not wallpaper: the product is a book whose numbers are produced by a
+ * committee sampling the world, so the substrate behaves like one - three
+ * chromatic fields drifting at different speeds, a coordinate grid panning under
+ * them, and a soft sweep crossing every nineteen seconds. No canvas, no images,
+ * no JavaScript, and nothing at rest that looks like dirt on the glass.
+ */
+
+/* a soft horizon at the top of the frame, so the field reads as depth rather
+   than a flat gradient */
+.ambient::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(52% 30% at 50% -4%, rgba(127, 182, 255, 0.12), transparent 72%);
+}
+
+.ambient {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 90% at 50% -10%, #0c181c 0%, #081013 48%, #060b0e 100%);
+}
+
+.ambient-field {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(72px);
+  will-change: transform;
+}
+/* the teal sits low and left, away from the masthead, so the top of every room
+   stays a cool graphite instead of a green wash */
+.ambient-field.a {
+  width: 70vw; height: 70vw; left: -24vw; top: 6vh;
+  background: radial-gradient(circle at 50% 50%, rgba(24, 122, 106, 0.5), transparent 64%);
+  animation: field-a 54s ease-in-out infinite alternate;
+}
+.ambient-field.b {
+  width: 70vw; height: 70vw; right: -16vw; top: -10vw;
+  background: radial-gradient(circle at 50% 50%, rgba(206, 116, 70, 0.4), transparent 62%);
+  animation: field-b 66s ease-in-out infinite alternate;
+}
+.ambient-field.c {
+  width: 96vw; height: 62vw; left: 14vw; bottom: -34vw;
+  background: radial-gradient(circle at 50% 50%, rgba(72, 88, 172, 0.32), transparent 66%);
+  animation: field-c 78s ease-in-out infinite alternate;
+}
+
+.ambient-grid {
+  position: absolute;
+  inset: -16%;
+  background-image:
+    linear-gradient(rgba(198, 228, 222, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(198, 228, 222, 0.05) 1px, transparent 1px);
+  background-size: 64px 64px;
+  -webkit-mask-image: radial-gradient(120% 95% at 50% 0%, #000 0%, rgba(0, 0, 0, 0.55) 46%, transparent 80%);
+  mask-image: radial-gradient(120% 95% at 50% 0%, #000 0%, rgba(0, 0, 0, 0.55) 46%, transparent 80%);
+  animation: grid-pan 92s linear infinite;
+}
+
+.ambient-sweep {
+  position: absolute;
+  left: -10%;
+  width: 120%;
+  height: 44vh;
+  top: -50vh;
+  background: linear-gradient(180deg, transparent 0%, rgba(95, 224, 172, 0.05) 55%, rgba(95, 224, 172, 0.09) 84%, transparent 100%);
+  animation: sweep 19s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+@keyframes field-a {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to { transform: translate3d(7vw, 5vh, 0) scale(1.12); }
+}
+@keyframes field-b {
+  from { transform: translate3d(0, 0, 0) scale(1.05); }
+  to { transform: translate3d(-6vw, 7vh, 0) scale(0.94); }
+}
+@keyframes field-c {
+  from { transform: translate3d(0, 2vh, 0) scale(0.96); }
+  to { transform: translate3d(-9vw, -4vh, 0) scale(1.1); }
+}
+@keyframes grid-pan {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(0, -64px, 0); }
+}
+@keyframes sweep {
+  from { transform: translateY(0); opacity: 0; }
+  12% { opacity: 1; }
+  88% { opacity: 1; }
+  to { transform: translateY(160vh); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ambient-field, .ambient-grid, .ambient-sweep { animation: none; }
+  .ambient-sweep { opacity: 0; }
+}

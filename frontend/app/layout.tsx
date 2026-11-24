@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 
 import "./base.css";
+import "./ambient.css";
 import "./fonts.css";
+
+import { Ambient } from "../components/ambient";
 
 export const metadata: Metadata = {
   title: "SynthForge · Generative Synthetic Assets on GenLayer",
@@ -12,7 +15,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <Ambient />
+        {children}
+      </body>
     </html>
   );
 }
