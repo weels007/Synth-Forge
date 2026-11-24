@@ -1,24 +1,38 @@
 {
-  "address": "0x562e1E4FBd555a1aE0dF529d543aE4D357A9bA49",
+  "address": "0x3B60C0380dfc8C186F3cfb2C2Bd8a3E148DC3060",
   "portfolioId": "PF-0001",
+  "manager": {
+    "name": "global",
+    "address": "0x40C7a3BA35C6Fc930C1598862c2812f170F13bEF"
+  },
+  "challenger": {
+    "name": "tester2",
+    "address": "0x0C0Fd005478Cef9219451BBD19Dfc6C0586fC1Ad"
+  },
   "strategyId": "ST-0002",
+  "revokedStrategyId": "ST-0001",
   "regime": "RISK_ON",
   "status": "LIVE",
-  "navAtto": 9.999559573891935e+23,
+  "navAtto": 1.0000058159555577e+24,
+  "verdict": "REVOKE",
+  "transactions": {
+    "challenge": "0xe336b9d09180ece96181c622c480ccb095d28786d992550dbec93819b9bf9f12",
+    "reopen": "0x0964403c2b8434be6923f4f6895508783278e6d9e976c6bb741c0adba5c38ff2"
+  },
   "proofs": [
     {
       "id": "PR-0008",
-      "kind": "MARK",
-      "verdict": "ACCEPTED"
-    },
-    {
-      "id": "PR-0007",
       "kind": "REBALANCE",
       "verdict": "ACCEPTED"
     },
     {
-      "id": "PR-0006",
+      "id": "PR-0007",
       "kind": "STRATEGY_APPROVAL",
+      "verdict": "ACCEPTED"
+    },
+    {
+      "id": "PR-0006",
+      "kind": "REOPEN",
       "verdict": "ACCEPTED"
     },
     {
@@ -47,5 +61,5 @@
       "verdict": "ACCEPTED"
     }
   ],
-  "ranAt": "2026-11-24T05:00:26.393Z"
+  "ranAt": "2026-11-24T05:42:53.403Z"
 }

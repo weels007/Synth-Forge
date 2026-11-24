@@ -1,0 +1,9 @@
+{
+  "network": "studionet",
+  "chainId": 61999,
+  "address": "0x3B60C0380dfc8C186F3cfb2C2Bd8a3E148DC3060",
+  "deployTx": "0x82c2ebb40e2be822a5da479e6aa3be6aa3134414bb7a39fcba7bfc5197c5098c",
+  "deployer": "0x40C7a3BA35C6Fc930C1598862c2812f170F13bEF",
+  "portfolioId": "PF-0001",
+  "deployedAt": "2026-11-24T05:39:07.625Z"
+}

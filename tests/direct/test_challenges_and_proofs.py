@@ -20,14 +20,14 @@ def _prepared(vault, direct_vm, direct_alice):
 def test_revoke_marks_the_strategy_and_reopens_review(vault, balanced_portfolio, direct_vm, direct_alice):
     _prepared(vault, direct_vm, direct_alice)
     direct_vm.clear_mocks()
-    mock_ruling(direct_vm, "REVOKE", ["MANDATE_DRIFT", "DURATION_SLEEVE"], "Allocation ignores the duration cap.")
+    mock_ruling(direct_vm, "REVOKE", ["MANDATE_DRIFT", "MISSING_HEDGE"], "Allocation ignores the duration sleeve.")
 
     ruling = json.loads(vault.challenge_strategy("PF-0001", "ST-0001", CHALLENGE))
     assert ruling["verdict"] == "REVOKE"
     # Violations are normalised (sorted, de-duplicated) so validators agree
     # regardless of the order the model emits them in.
-    assert ruling["violations"] == ["DURATION_SLEEVE", "MANDATE_DRIFT"]
-    assert ruling["explanation"] == "Allocation ignores the duration cap."
+    assert ruling["violations"] == ["MANDATE_DRIFT", "MISSING_HEDGE"]
+    assert ruling["explanation"] == "Allocation ignores the duration sleeve."
 
     strategy = json.loads(vault.get_strategy("ST-0001"))
     assert strategy["status"] == "REVOKED"
@@ -77,7 +77,7 @@ def test_challenge_reason_is_bounded(vault, balanced_portfolio, direct_vm, direc
 def test_anyone_can_challenge(vault, balanced_portfolio, direct_vm, direct_alice, direct_bob):
     _prepared(vault, direct_vm, direct_alice)
     direct_vm.clear_mocks()
-    mock_ruling(direct_vm, "REVOKE", ["RISK_PROFILE_MISMATCH"], "Not a balanced book.")
+    mock_ruling(direct_vm, "REVOKE", ["MANDATE_DRIFT"], "Not a balanced book.")
     direct_vm.sender = direct_bob
     ruling = json.loads(vault.challenge_strategy("PF-0001", "ST-0001", CHALLENGE))
     assert ruling["verdict"] == "REVOKE"

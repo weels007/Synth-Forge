@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
-import "./globals.css";
+
+import "./base.css";
+import "./fonts.css";
 
 export const metadata: Metadata = {
   title: "SynthForge · Generative Synthetic Assets on GenLayer",

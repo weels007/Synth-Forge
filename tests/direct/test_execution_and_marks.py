@@ -129,7 +129,7 @@ def test_revoked_strategy_cannot_be_executed(vault, balanced_portfolio, direct_v
 
     _prepare(vault, direct_vm, direct_alice)
     direct_vm.clear_mocks()
-    mock_ruling(direct_vm, "REVOKE", ["RISK_LIMIT_BREACH"])
+    mock_ruling(direct_vm, "REVOKE", ["CAP_BREACH"])
     direct_vm.sender = direct_alice
     vault.challenge_strategy("PF-0001", "ST-0001", "The book breached the duration sleeve limit.")
     with direct_vm.expect_revert("[EXPECTED] strategy is not active"):

@@ -55,6 +55,8 @@ export type Strategy = {
   created_by: string;
   created_at: string;
   executions: number;
+  /** One ruling per strategy: a settled draft cannot be re-litigated. */
+  adjudicated: boolean;
 };
 
 export type Proof = {
@@ -69,8 +71,28 @@ export type Proof = {
   weight_l1_bps: number;
   verdict: string;
   verdict_detail: string;
+  /** The inputs the decision was made on: fetched sources, weights, violations. */
+  evidence: ProofEvidence;
   executor: string;
   created_at: string;
+};
+
+export type ProofEvidence = {
+  sources?: { symbol: string; url: string; path: string; price_atto: string }[];
+  target_weights?: Allocation;
+  turnover_bps?: string;
+  violations?: string[];
+  allocation?: Allocation;
+  regime?: string;
+  confidence_bps?: string;
+  prompt_digest?: string;
+  capital_atto?: string;
+  amount_atto?: string;
+  shares_atto?: string;
+  shares_minted_atto?: string;
+  payout_atto?: string;
+  note?: string;
+  previous_status?: string;
 };
 
 export type SystemInfo = {
@@ -87,6 +109,7 @@ export type SystemInfo = {
   price_tolerance_bps: number;
   max_weight_delta_bps: number;
   max_l1_delta_bps: number;
+  min_reason_chars: number;
   caps: Record<string, { max_single_bps: number; max_high_bps: number }>;
 };
 
@@ -136,6 +159,27 @@ export async function loadSnapshot(address: string): Promise<Snapshot> {
 
 export type Fees = { distribution: Record<string, unknown>; feeValue: string };
 
+/**
+ * The canonical deployment, published by deploy/deployScript.ts next to the
+ * fee snapshot. The console prefers this over a build-time env var so the
+ * address it talks to can never drift from the documented deployment.
+ */
+export type Deployment = {
+  network: string;
+  chainId: number;
+  address: string;
+  deployTx: string;
+  deployer: string;
+  portfolioId: string | null;
+  deployedAt: string;
+};
+
+export async function loadDeployment(): Promise<Deployment | null> {
+  const response = await fetch("/deployment.json", { cache: "no-store" });
+  if (!response.ok) return null;
+  return (await response.json()) as Deployment;
+}
+
 let feeCache: Fees | null = null;
 
 /** The fee deposit snapshot published by deploy/deployScript.ts. */
@@ -164,13 +208,19 @@ export async function connectWallet(): Promise<Wallet> {
   return { address: accounts[0], client };
 }
 
-/** Submit a write, wait for the receipt, and surface the leader error text. */
+/**
+ * Submit a write, wait for the receipt, and surface the leader error text.
+ *
+ * The receipt status is returned verbatim: a transaction that reached ACCEPTED
+ * is not FINALIZED, because the appeal window is still open. Callers must not
+ * present one as the other.
+ */
 export async function submit(
   client: ReturnType<typeof createClient>,
   address: string,
   functionName: string,
   args: unknown[],
-): Promise<{ hash: string; result: unknown }> {
+): Promise<{ hash: string; result: unknown; status: string }> {
   const fees = await loadFees();
   const hash = await client.writeContract({
     address: address as `0x${string}`,
@@ -184,7 +234,8 @@ export async function submit(
     const payload = leader?.result?.payload;
     throw new Error(`execution ${leader.execution_result}: ${typeof payload === "string" ? payload : JSON.stringify(payload)}`);
   }
-  return { hash: String(hash), result: leader?.result?.payload ?? null };
+  const status = String(receipt?.status_name ?? receipt?.status ?? "ACCEPTED").toUpperCase();
+  return { hash: String(hash), result: leader?.result?.payload ?? null, status };
 }
 
 /** Read a single view and JSON-decode it, for one-off calls like preview_prompt. */

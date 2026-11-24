@@ -6,15 +6,21 @@
  * before it reports success or writes deployments.json.
  *
  * Usage:
- *   node deploy/deployScript.ts                    # deploy + seed + verify
+ *   node deploy/deployScript.ts                    # deploy + seed + verify (wallet/global)
+ *   node deploy/deployScript.ts --wallet tester1   # sign with another keystore
  *   node deploy/deployScript.ts --dry-run          # print the plan, send nothing
  *   node deploy/deployScript.ts --skip-seed        # deploy only
  *   node deploy/deployScript.ts --address 0x...    # seed an existing deployment
+ *
+ * The deployer key comes from the keystores in D:\Genlayer-project\weels\wallet
+ * (name default "global", override with --wallet or SYNTHFORGE_WALLET). The key
+ * is decrypted in memory, never written to disk. DEPLOYER_PRIVATE_KEY still
+ * overrides everything for CI use.
  */
 
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -104,28 +110,27 @@ const dryRun = args["dry-run"] !== undefined;
 const skipSeed = args["skip-seed"] !== undefined;
 const existing = args.address;
 
-const { makeClient, makeDriver, readKeyFromEnv, transactionFees, fmt } = createRequire(import.meta.url)(
+const { createRawClient, makeDriver, transactionFees, fmt } = createRequire(import.meta.url)(
   path.join(ROOT, "scripts", "studionet.cjs"),
 );
+const { loadWallet } = await import(pathToFileURL(path.join(ROOT, "scripts", "wallet.mjs")).href);
 
-function resolveKey(): string {
+async function resolveWallet(): Promise<string> {
   if (process.env.DEPLOYER_PRIVATE_KEY) return process.env.DEPLOYER_PRIVATE_KEY.trim();
-  const files = [
-    process.env.SYNTHFORGE_KEY_FILE ?? "",
-    path.join(ROOT, ".env"),
-    "D:\\Genlayer-project\\wallet\\.env",
-  ];
-  const key = readKeyFromEnv(files.filter(Boolean));
-  if (key) return key;
-  console.error(
-    "No deployer key found. Set DEPLOYER_PRIVATE_KEY or SYNTHFORGE_KEY_FILE, " +
-      "or put GENLAYER_DEV_KEY in .env (the repo .gitignore keeps it out of git).",
-  );
-  process.exit(1);
+  const name = args.wallet ?? process.env.SYNTHFORGE_WALLET ?? "global";
+  try {
+    const wallet = await loadWallet(name);
+    console.log(`wallet     ${wallet.name} ${wallet.address}`);
+    return wallet.privateKey;
+  } catch (error) {
+    console.error(`Could not unlock wallet "${name}": ${(error as Error).message}`);
+    console.error("Set DEPLOYER_PRIVATE_KEY, or pass --wallet with a keystore that has a .password file.");
+    process.exit(1);
+  }
 }
 
 async function main() {
-  const client = makeClient(writeKeyTemp(resolveKey()));
+  const client = createRawClient(await resolveWallet());
   const driver = makeDriver(client);
   console.log(`deployer   ${client.account.address}`);
   console.log(`balance    ${fmt(await driver.balance())}`);
@@ -250,11 +255,6 @@ async function main() {
   console.log("  cd frontend && npm install && npm run dev   # dashboard against this address");
 }
 
-function writeKeyTemp(key: string): string {
-  const file = path.join(ROOT, "scripts", ".deployer.tmp");
-  fs.writeFileSync(file, key, { encoding: "utf-8", mode: 0o600 });
-  return file;
-}
 
 function writeDeployments(record: { address: string; deployTx: string; deployer: string; universe: any; portfolio: string | null }) {
   // Re-seeding an existing deployment must not erase the original deploy tx.
@@ -286,6 +286,20 @@ function writeDeployments(record: { address: string; deployTx: string; deployer:
   const fees = { ...transactionFees(), capturedAt: new Date().toISOString(), network: "studionet" };
   fs.writeFileSync(path.join(publicDir, "fees.json"), JSON.stringify(fees, null, 2) + "\n", "utf-8");
   console.log("wrote frontend/public/fees.json");
+
+  // The console resolves the contract it talks to from this file, not from a
+  // build-time env var, so the page cannot drift from the documented deployment.
+  const deployment = {
+    network: "studionet",
+    chainId: 61999,
+    address: record.address,
+    deployTx: record.deployTx,
+    deployer: record.deployer,
+    portfolioId: record.portfolio,
+    deployedAt: payload.deployedAt,
+  };
+  fs.writeFileSync(path.join(publicDir, "deployment.json"), JSON.stringify(deployment, null, 2) + "\n", "utf-8");
+  console.log("wrote frontend/public/deployment.json");
 
   fs.rmSync(path.join(ROOT, "scripts", ".deployer.tmp"), { force: true });
 }

@@ -25,12 +25,32 @@ ERROR_EXTERNAL = "[EXTERNAL]"
 ERROR_TRANSIENT = "[TRANSIENT]"
 ERROR_LLM = "[LLM_ERROR]"
 
-MAX_WEIGHT_DELTA_BPS = 1500
-MAX_L1_DELTA_BPS = 3500
+# Consensus bands. Tight on purpose: the weight vector is the financially
+# binding output, so two nodes that differ materially must not agree.
+MAX_WEIGHT_DELTA_BPS = 500
+MAX_L1_DELTA_BPS = 1200
 PRICE_TOLERANCE_BPS = 150
 MAX_THESIS_CHARS = 2400
+MIN_REASON_CHARS = 40
 MAX_REASON_CHARS = 1200
 MAX_RATIONALE_CHARS = 900
+
+# Adjudication is decided on a closed vocabulary. Free-text grounds can never
+# reach consensus: two independent model runs phrase the same breach
+# differently, so a validator comparing literal strings would reject an honest
+# ruling and the round would rotate forever. These codes are the only grounds a
+# ruling may cite, and every objective policy breach is decided in Python -
+# the model cannot talk its way out of a cap that is already breached.
+VIOLATION_CODES = (
+    "CAP_BREACH",
+    "SUM_MISMATCH",
+    "MANDATE_DRIFT",
+    "CONCENTRATION_RISK",
+    "MISSING_HEDGE",
+    "THESIS_CONTRADICTION",
+    "UNSUPPORTED_INSTRUMENT",
+)
+MAX_VIOLATIONS = 3
 
 
 # ---------------------------------------------------------------------------
@@ -88,6 +108,7 @@ class Strategy:
     created_by: Address
     created_at: str
     executions: u256
+    ruled: u256
 
 
 @allow_storage
@@ -104,6 +125,7 @@ class ExecutionProof:
     weight_l1_bps: u256
     verdict: str
     verdict_detail: str
+    evidence_json: str
     executor: Address
     created_at: str
 
@@ -165,6 +187,52 @@ def _dig(data, path: str):
     return current
 
 
+def _decimal_atto(text: str, error_prefix: str) -> int:
+    # Integer-only decimal parser. No float anywhere: float arithmetic is not
+    # reproducible across nodes and is rejected by the VM in money paths.
+    raw = str(text).strip()
+    negative = raw.startswith("-")
+    if negative:
+        raw = raw[1:]
+    if raw.startswith("+"):
+        raw = raw[1:]
+    lower = raw.lower()
+    exponent = 0
+    if "e" in lower:
+        parts = lower.split("e")
+        if len(parts) != 2:
+            raise gl.vm.UserError(error_prefix + " unparsable number: " + str(text))
+        raw = parts[0]
+        try:
+            exponent = int(parts[1])
+        except Exception:
+            raise gl.vm.UserError(error_prefix + " unparsable exponent: " + str(text))
+        if exponent > 24 or exponent < -24:
+            raise gl.vm.UserError(error_prefix + " exponent out of range: " + str(text))
+    if "." in raw:
+        pieces = raw.split(".")
+        if len(pieces) != 2:
+            raise gl.vm.UserError(error_prefix + " unparsable number: " + str(text))
+        whole = pieces[0]
+        frac = pieces[1]
+    else:
+        whole = raw
+        frac = ""
+    if whole == "":
+        whole = "0"
+    if not whole.isdigit() or (frac != "" and not frac.isdigit()):
+        raise gl.vm.UserError(error_prefix + " unparsable number: " + str(text))
+    digits = int(whole + frac)
+    shift = 18 + exponent - len(frac)
+    if shift >= 0:
+        amount = digits * (10 ** shift)
+    else:
+        amount = digits // (10 ** (-shift))
+    if negative:
+        return -amount
+    return amount
+
+
 def _to_atto(value) -> int:
     if isinstance(value, bool):
         raise gl.vm.UserError(f"{ERROR_EXTERNAL} price payload is a boolean")
@@ -177,29 +245,7 @@ def _to_atto(value) -> int:
         text = text.replace(noise, "")
     if text == "" or text.lower() == "null" or text.lower() == "none":
         raise gl.vm.UserError(f"{ERROR_EXTERNAL} empty price")
-    if "e" in text.lower():
-        try:
-            return int(round(float(text) * ATTO))
-        except Exception:
-            raise gl.vm.UserError(f"{ERROR_EXTERNAL} unparsable price: {value}")
-    negative = text.startswith("-")
-    if negative:
-        text = text[1:]
-    if text.startswith("+"):
-        text = text[1:]
-    if "." in text:
-        whole, frac = text.split(".", 1)
-    else:
-        whole, frac = text, ""
-    if whole == "":
-        whole = "0"
-    frac = (frac + "000000000000000000")[:18]
-    if not whole.isdigit() or not frac.isdigit():
-        raise gl.vm.UserError(f"{ERROR_EXTERNAL} unparsable price: {value}")
-    amount = int(whole) * ATTO + int(frac)
-    if negative:
-        return -amount
-    return amount
+    return _decimal_atto(text, ERROR_EXTERNAL)
 
 
 def _http_json(url: str):
@@ -263,10 +309,31 @@ def _compare_prices(leader_prices, validator_prices) -> bool:
 
 
 def _coerce_bps(value) -> int:
-    try:
-        parsed = int(round(float(str(value).strip())))
-    except Exception:
+    # Integer-only: weights decide the book, so they may never pass through a
+    # float. "30%", "30.4" and 30 all resolve deterministically.
+    text = str(value).strip()
+    for noise in ("%", " ", "_", ","):
+        text = text.replace(noise, "")
+    if text == "" or text.lower() == "none" or text.lower() == "null":
         raise gl.vm.UserError(f"{ERROR_LLM} non-numeric weight: {value}")
+    negative = text.startswith("-")
+    if negative:
+        text = text[1:]
+    if text.startswith("+"):
+        text = text[1:]
+    whole = text
+    frac = ""
+    if "." in text:
+        whole, frac = text.split(".", 1)
+    if whole == "":
+        whole = "0"
+    if not whole.isdigit() or (frac != "" and not frac.isdigit()):
+        raise gl.vm.UserError(f"{ERROR_LLM} non-numeric weight: {value}")
+    parsed = int(whole)
+    if frac != "" and int(frac[0]) >= 5:
+        parsed = parsed + 1
+    if negative:
+        parsed = -parsed
     if parsed < 0:
         return 0
     if parsed > BPS:
@@ -461,33 +528,98 @@ def _compare_proposals(leader_proposal, validator_proposal) -> bool:
     return total_delta <= MAX_L1_DELTA_BPS
 
 
-def _normalize_verdict(raw) -> dict:
+def _known_violations(raw) -> list:
+    # Keep only grounds from the shared vocabulary, deduplicated and ordered, so
+    # two nodes that read the same breach cite the same code.
+    codes = []
+    if isinstance(raw, list):
+        for item in raw:
+            value = str(item).strip().upper().replace(" ", "_").replace("-", "_")
+            if value in VIOLATION_CODES and value not in codes:
+                codes.append(value)
+    codes = sorted(codes)
+    if len(codes) > MAX_VIOLATIONS:
+        codes = codes[:MAX_VIOLATIONS]
+    return codes
+
+
+def _policy_breaches(allocation: dict, risk_profile: str, universe: dict) -> list:
+    # Objective breaches, computed identically by every node from policy and
+    # pinned state. These outrank the model: a book that already breaches a cap
+    # is revoked whatever the prompt says, which removes the largest source of
+    # verdict flapping between independent runs.
+    codes = []
+    cap_single = _max_single_bps(risk_profile)
+    cap_high = _max_high_bps(risk_profile)
+    total = 0
+    high_total = 0
+    for symbol in sorted(allocation.keys()):
+        weight = int(allocation[symbol])
+        total += weight
+        meta = universe.get(symbol, None)
+        if meta is None:
+            codes.append("UNSUPPORTED_INSTRUMENT")
+            continue
+        limit = int(meta["max_weight_bps"])
+        if limit > cap_single:
+            limit = cap_single
+        if weight > limit:
+            codes.append("CAP_BREACH")
+        if str(meta["risk_bucket"]) == "HIGH":
+            high_total += weight
+    if total != BPS:
+        codes.append("SUM_MISMATCH")
+    if high_total > cap_high:
+        codes.append("CAP_BREACH")
+    unique = []
+    for code in codes:
+        if code not in unique:
+            unique.append(code)
+    return sorted(unique)
+
+
+def _normalize_verdict(raw, hard_codes=None) -> dict:
     if not isinstance(raw, dict):
         raise gl.vm.UserError(f"{ERROR_LLM} ruling is not a JSON object")
     verdict = str(raw.get("verdict", "")).strip().upper()
     if verdict != "UPHOLD" and verdict != "REVOKE":
         raise gl.vm.UserError(f"{ERROR_LLM} invalid verdict: {verdict}")
-    violations = []
-    raw_list = raw.get("violations", [])
-    if isinstance(raw_list, list):
-        for item in raw_list:
-            value = str(item).strip().upper().replace(" ", "_")
-            if value != "" and len(value) <= 60:
-                violations.append(value)
-    violations = sorted(violations)
+    violations = _known_violations(raw.get("violations", []))
     explanation = str(raw.get("explanation", "")).strip()
     if len(explanation) > MAX_RATIONALE_CHARS:
         explanation = explanation[:MAX_RATIONALE_CHARS]
+    if hard_codes:
+        # Policy already decided this case; keep the model text, not its opinion.
+        verdict = "REVOKE"
+        violations = sorted(str(code) for code in hard_codes)
+    if verdict == "REVOKE" and len(violations) == 0:
+        raise gl.vm.UserError(f"{ERROR_LLM} revoke ruling cites no violation")
     return {"verdict": verdict, "violations": violations, "explanation": explanation}
 
 
 def _compare_verdicts(leader_ruling, validator_ruling) -> bool:
-    # Comparative check on the decision field. Both validators re-fetched the
-    # source facts and re-ran the adjudication, so agreeing on the verdict is
-    # independent verification, not leader trust.
+    # Every mandatory criterion, not just the label. The verdict decides whether
+    # the book stays live, and the violation set is the stated grounds a ruling
+    # is audited against, so two nodes that disagree on either would produce
+    # different state and must not reach consensus.
     if not isinstance(leader_ruling, dict) or not isinstance(validator_ruling, dict):
         return False
-    return str(leader_ruling.get("verdict", "")) == str(validator_ruling.get("verdict", ""))
+    leader_verdict = str(leader_ruling.get("verdict", "")).upper()
+    validator_verdict = str(validator_ruling.get("verdict", "")).upper()
+    if leader_verdict != validator_verdict:
+        return False
+    if leader_verdict != "UPHOLD" and leader_verdict != "REVOKE":
+        return False
+    # Compare the vocabulary codes, not the raw text: an unknown or differently
+    # phrased citation is dropped identically on both sides, so honest rulings
+    # still converge while differing grounds still do not.
+    leader_violations = _known_violations(leader_ruling.get("violations"))
+    validator_violations = _known_violations(validator_ruling.get("violations"))
+    if leader_violations != validator_violations:
+        return False
+    if leader_verdict == "REVOKE" and len(leader_violations) == 0:
+        return False
+    return True
 
 
 def _handle_leader_error(leaders_res, leader_fn) -> bool:
@@ -567,7 +699,7 @@ def _build_strategy_prompt(portfolio_id: str, mandate: str, risk_profile: str, h
     return chr(10).join(chunks)
 
 
-def _build_challenge_prompt(mandate: str, risk_profile: str, thesis: str, allocation: dict, universe: dict, challenge_reason: str) -> str:
+def _build_challenge_prompt(mandate: str, risk_profile: str, thesis: str, allocation: dict, universe: dict, challenge_reason: str, hard_codes: list) -> str:
     cap_single = _max_single_bps(risk_profile)
     cap_high = _max_high_bps(risk_profile)
     chunks = []
@@ -599,27 +731,71 @@ def _build_challenge_prompt(mandate: str, risk_profile: str, thesis: str, alloca
     chunks.append("- max HIGH risk total: " + str(cap_high) + " bps")
     chunks.append("- allocation must sum to 10000 bps")
     chunks.append("")
+    chunks.append("OBJECTIVE POLICY FACTS (computed on chain, not up for debate)")
+    if len(hard_codes) > 0:
+        for code in sorted(hard_codes):
+            chunks.append("- breach found: " + str(code))
+        chunks.append("A breach listed above is a fact. The verdict MUST be REVOKE and")
+        chunks.append("violations MUST be exactly the codes listed above.")
+    else:
+        chunks.append("- no cap, sum or coverage breach was detected")
+    chunks.append("")
     chunks.append("CHALLENGE")
     chunks.append("<<<")
     chunks.append(challenge_reason)
     chunks.append(">>>")
     chunks.append("")
+    chunks.append("VIOLATION CODES (cite only these exact strings)")
+    chunks.append("- CAP_BREACH: a leg or the HIGH-risk sleeve exceeds its policy cap")
+    chunks.append("- SUM_MISMATCH: the legs do not sum to 10000 bps")
+    chunks.append("- MANDATE_DRIFT: the book no longer implements the stated mandate")
+    chunks.append("- CONCENTRATION_RISK: exposure is concentrated in correlated instruments")
+    chunks.append("- MISSING_HEDGE: protection the mandate requires is absent")
+    chunks.append("- THESIS_CONTRADICTION: the book contradicts its own stated thesis")
+    chunks.append("- UNSUPPORTED_INSTRUMENT: a leg is not an enabled instrument")
+    chunks.append("")
     chunks.append("DECIDE")
-    chunks.append("- REVOKE when the allocation materially violates the mandate, the policy")
-    chunks.append("  limits, or the stated thesis, or when the challenge is substantiated.")
-    chunks.append("- UPHOLD when the allocation is a defensible implementation of the thesis")
-    chunks.append("  and stays inside every policy limit, even if you would size differently.")
+    chunks.append("- REVOKE when an objective breach is listed, or when the challenge names")
+    chunks.append("  a real breach of the mandate or the stated thesis.")
+    chunks.append("- UPHOLD when the book implements the mandate inside every policy limit,")
+    chunks.append("  even if you would have sized the arms differently.")
+    chunks.append("- Cite between one and three codes, exactly as written above.")
+    chunks.append("  UPHOLD may cite none.")
     chunks.append("")
     chunks.append("Return ONLY this JSON object, nothing else:")
-    chunks.append('{"verdict": "UPHOLD|REVOKE", "violations": ["SHORT_CODE"], "explanation": "at most 500 characters"}')
+    chunks.append('{"verdict": "UPHOLD|REVOKE", "violations": ["CODE"], "explanation": "at most 400 characters"}')
     return chr(10).join(chunks)
 
 
 def _specs_digest(specs: list, prices: dict) -> str:
+    # The digest binds symbol, source URL, JSON path and attested price: a
+    # proof for one source cannot be read as a proof for another.
     rows = []
     for spec in specs:
-        rows.append(str(spec["symbol"]) + ":" + str(int(prices[spec["symbol"]])))
+        rows.append(
+            str(spec["symbol"]) + "|" + str(spec["url"]) + "|" + str(spec["path"])
+            + ":" + str(int(prices[spec["symbol"]]))
+        )
     return _sha("|".join(rows))
+
+
+def _specs_evidence(specs: list, prices: dict) -> list:
+    rows = []
+    for spec in specs:
+        rows.append({
+            "symbol": str(spec["symbol"]),
+            "url": str(spec["url"]),
+            "path": str(spec["path"]),
+            "price_atto": str(int(prices[spec["symbol"]])),
+        })
+    return rows
+
+
+def _parse_evidence(evidence_json: str):
+    try:
+        return json.loads(evidence_json)
+    except Exception:
+        return evidence_json
 
 
 
@@ -711,7 +887,15 @@ class SynthForgeVault(gl.Contract):
             }
         return universe
 
-    def _record_proof(self, kind: str, portfolio_id: str, strategy_id: str, allocation_digest: str, input_digest: str, nav_before_atto: int, nav_after_atto: int, weight_l1_bps: int, verdict: str, verdict_detail: str) -> str:
+    def _record_proof(self, kind: str, portfolio_id: str, strategy_id: str, allocation_digest: str, input_digest: str, nav_before_atto: int, nav_after_atto: int, weight_l1_bps: int, verdict: str, verdict_detail: str, evidence=None) -> str:
+        # evidence is the committed material behind the decision: the exact
+        # URLs and prices that were fetched, or the allocation and cited
+        # violations. Digest alone would not let anyone re-run the decision.
+        evidence_json = "{}"
+        if evidence is not None:
+            evidence_json = json.dumps(evidence, sort_keys=True)
+            if len(evidence_json) > 4000:
+                evidence_json = evidence_json[:4000]
         sequence = self._next("proof")
         proof_id = "PR-" + _pad(int(sequence), 4)
         self.proofs[proof_id] = ExecutionProof(
@@ -726,6 +910,7 @@ class SynthForgeVault(gl.Contract):
             weight_l1_bps=u256(weight_l1_bps),
             verdict=verdict,
             verdict_detail=verdict_detail[:600],
+            evidence_json=evidence_json,
             executor=gl.message.sender_address,
             created_at=_now_iso(),
         )
@@ -788,6 +973,7 @@ class SynthForgeVault(gl.Contract):
             "created_by": strategy.created_by.as_hex,
             "created_at": strategy.created_at,
             "executions": int(strategy.executions),
+            "adjudicated": int(strategy.ruled) != 0,
         }
 
     def _proof_json(self, proof: ExecutionProof) -> dict:
@@ -803,6 +989,7 @@ class SynthForgeVault(gl.Contract):
             "weight_l1_bps": int(proof.weight_l1_bps),
             "verdict": proof.verdict,
             "verdict_detail": proof.verdict_detail,
+            "evidence": _parse_evidence(proof.evidence_json),
             "executor": proof.executor.as_hex,
             "created_at": proof.created_at,
         }
@@ -917,6 +1104,7 @@ class SynthForgeVault(gl.Contract):
         self._record_proof(
             "PORTFOLIO_OPEN", portfolio_id, "", "", _sha(portfolio_id + "|" + str(capital)),
             capital, capital, 0, "ACCEPTED", "portfolio seeded with paper capital",
+            evidence={"capital_atto": str(capital)},
         )
         return portfolio_id
 
@@ -947,6 +1135,7 @@ class SynthForgeVault(gl.Contract):
         self._record_proof(
             "DEPOSIT", portfolio_id, "", "", _sha(key + "|" + str(amount)),
             nav_before, nav_before + amount, 0, "ACCEPTED", str(minted) + " shares minted",
+            evidence={"amount_atto": str(amount), "shares_minted_atto": str(minted)},
         )
         return json.dumps({"portfolio_id": portfolio_id, "shares_minted_atto": minted, "nav_atto": nav_before + amount}, sort_keys=True)
 
@@ -989,6 +1178,7 @@ class SynthForgeVault(gl.Contract):
         self._record_proof(
             "REDEMPTION", portfolio_id, portfolio.active_strategy_id, "", _sha(key + "|" + str(amount)),
             nav_before, nav_before - payout, 0, "ACCEPTED", "in-kind redemption of " + str(amount) + " shares",
+            evidence={"shares_atto": str(amount), "payout_atto": str(payout)},
         )
         return json.dumps({"portfolio_id": portfolio_id, "shares_burned_atto": amount, "payout_atto": payout}, sort_keys=True)
 
@@ -1073,6 +1263,7 @@ class SynthForgeVault(gl.Contract):
             created_by=gl.message.sender_address,
             created_at=created_at,
             executions=u256(0),
+            ruled=u256(0),
         )
         self.strategies[strategy_id] = strategy
         self.strategy_ids.append(strategy_id)
@@ -1083,6 +1274,12 @@ class SynthForgeVault(gl.Contract):
             "STRATEGY_APPROVAL", portfolio_id, strategy_id, digest, _sha(prompt),
             int(portfolio.nav_atto), int(portfolio.nav_atto), 0, "ACCEPTED",
             "regime " + regime + " accepted by validator consensus",
+            evidence={
+                "regime": regime,
+                "allocation": weights,
+                "confidence_bps": str(confidence),
+                "prompt_digest": _sha(prompt),
+            },
         )
         return json.dumps(self._strategy_json(strategy), sort_keys=True)
 
@@ -1192,6 +1389,11 @@ class SynthForgeVault(gl.Contract):
             "REBALANCE", portfolio_id, strategy_id, strategy.digest, _specs_digest(specs, prices),
             nav_before, nav_after, turnover, "ACCEPTED",
             "executed under validator-attested prices",
+            evidence={
+                "sources": _specs_evidence(specs, prices),
+                "target_weights": allocation,
+                "turnover_bps": str(turnover),
+            },
         )
         return json.dumps({
             "proof_id": proof_id,
@@ -1241,6 +1443,7 @@ class SynthForgeVault(gl.Contract):
         proof_id = self._record_proof(
             "MARK", portfolio_id, portfolio.active_strategy_id, "", _specs_digest(specs, prices),
             nav_before, nav_after, 0, "ACCEPTED", "consensus mark-to-market",
+            evidence={"sources": _specs_evidence(specs, prices)},
         )
         return json.dumps({
             "proof_id": proof_id,
@@ -1262,21 +1465,28 @@ class SynthForgeVault(gl.Contract):
             raise gl.vm.UserError(f"{ERROR_EXPECTED} strategy does not belong to this portfolio")
         if strategy.status == "REVOKED":
             raise gl.vm.UserError(f"{ERROR_EXPECTED} strategy is already revoked")
+        if int(strategy.ruled) != 0:
+            raise gl.vm.UserError(f"{ERROR_EXPECTED} strategy already adjudicated")
         reason_text = str(reason).strip()
-        if len(reason_text) < 10:
-            raise gl.vm.UserError(f"{ERROR_EXPECTED} challenge reason is too short")
+        if len(reason_text) < MIN_REASON_CHARS:
+            raise gl.vm.UserError(
+                f"{ERROR_EXPECTED} challenge reason must state the case in at least "
+                + str(MIN_REASON_CHARS) + " characters"
+            )
         if len(reason_text) > MAX_REASON_CHARS:
             raise gl.vm.UserError(f"{ERROR_EXPECTED} challenge reason is too long")
         universe = self._pin_universe()
         allocation = json.loads(strategy.allocation_json)
+        # Deterministic part of the ruling, computed before any model runs.
+        hard_codes = _policy_breaches(allocation, portfolio.risk_profile, universe)
         prompt = _build_challenge_prompt(
             portfolio.mandate, portfolio.risk_profile, strategy.thesis,
-            allocation, universe, reason_text,
+            allocation, universe, reason_text, hard_codes,
         )
 
         def leader_fn():
             raw = gl.nondet.exec_prompt(prompt, response_format="json")
-            return _normalize_verdict(raw)
+            return _normalize_verdict(raw, hard_codes)
 
         def validator_fn(leaders_res) -> bool:
             if not isinstance(leaders_res, gl.vm.Return):
@@ -1287,9 +1497,13 @@ class SynthForgeVault(gl.Contract):
         verdict = str(ruling["verdict"])
         explanation = str(ruling["explanation"])
         violations = ruling["violations"]
+        # One ruling per strategy, enforced by state: no second challenge can
+        # re-litigate a settled allocation or flip the portfolio twice.
+        strategy.ruled = u256(1)
         if verdict == "REVOKE":
             strategy.status = "REVOKED"
-            self.strategies[strategy_id] = strategy
+        self.strategies[strategy_id] = strategy
+        if verdict == "REVOKE":
             if portfolio.active_strategy_id == strategy_id:
                 portfolio.active_strategy_id = ""
                 portfolio.status = "REVIEW"
@@ -1300,6 +1514,12 @@ class SynthForgeVault(gl.Contract):
         proof_id = self._record_proof(
             "CHALLENGE", portfolio_id, strategy_id, strategy.digest, _sha(prompt),
             int(portfolio.nav_atto), int(portfolio.nav_atto), 0, verdict, proof_detail,
+            evidence={
+                "verdict": verdict,
+                "violations": violations,
+                "allocation": allocation,
+                "prompt_digest": _sha(prompt),
+            },
         )
         return json.dumps({
             "proof_id": proof_id,
@@ -1308,6 +1528,34 @@ class SynthForgeVault(gl.Contract):
             "violations": violations,
             "explanation": explanation,
         }, sort_keys=True)
+
+    @gl.public.write
+    def reopen_portfolio(self, portfolio_id: str, note: str) -> str:
+        # Explicit recovery transition. A revoke parks the portfolio in REVIEW
+        # with no active strategy; without this the only way forward would be
+        # an implicit side effect of generating another strategy. The manager
+        # or the owner states the case, and the transition is recorded.
+        if self.paused:
+            raise gl.vm.UserError(f"{ERROR_EXPECTED} vault is paused")
+        portfolio = self._require_portfolio(portfolio_id)
+        if gl.message.sender_address != portfolio.manager and gl.message.sender_address != self.owner:
+            raise gl.vm.UserError(f"{ERROR_EXPECTED} only the manager or owner can reopen a portfolio")
+        if portfolio.status != "REVIEW":
+            raise gl.vm.UserError(f"{ERROR_EXPECTED} portfolio is not under review: " + portfolio.status)
+        note_text = str(note).strip()
+        if len(note_text) < MIN_REASON_CHARS:
+            raise gl.vm.UserError(f"{ERROR_EXPECTED} reopen note is too short")
+        if len(note_text) > MAX_REASON_CHARS:
+            raise gl.vm.UserError(f"{ERROR_EXPECTED} reopen note is too long")
+        portfolio.status = "LIVE"
+        self.portfolios[portfolio_id] = portfolio
+        self._record_proof(
+            "REOPEN", portfolio_id, "", "", _sha(portfolio_id + "|" + note_text),
+            int(portfolio.nav_atto), int(portfolio.nav_atto), 0, "ACCEPTED",
+            "portfolio reopened: " + note_text,
+            evidence={"note": note_text, "previous_status": "REVIEW"},
+        )
+        return json.dumps(self._portfolio_json(portfolio), sort_keys=True)
 
     # ------------------------------------------------------------------
     # Read surface
@@ -1329,6 +1577,7 @@ class SynthForgeVault(gl.Contract):
             "price_tolerance_bps": PRICE_TOLERANCE_BPS,
             "max_weight_delta_bps": MAX_WEIGHT_DELTA_BPS,
             "max_l1_delta_bps": MAX_L1_DELTA_BPS,
+            "min_reason_chars": MIN_REASON_CHARS,
             "caps": {
                 "CONSERVATIVE": {"max_single_bps": _max_single_bps("CONSERVATIVE"), "max_high_bps": _max_high_bps("CONSERVATIVE")},
                 "BALANCED": {"max_single_bps": _max_single_bps("BALANCED"), "max_high_bps": _max_high_bps("BALANCED")},
