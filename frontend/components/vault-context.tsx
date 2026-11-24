@@ -36,8 +36,12 @@ type VaultContextValue = {
 const VaultContext = createContext<VaultContextValue | null>(null);
 
 function message(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return String(error);
+  const text = error instanceof Error ? error.message : String(error);
+  // A public node caps reads per hour; say so plainly and say who retries.
+  if (/rate limit/i.test(text)) {
+    return `${text} The console retries on its own every two minutes; nothing is lost.`;
+  }
+  return text;
 }
 
 export function VaultProvider({ children }: { children: React.ReactNode }) {
