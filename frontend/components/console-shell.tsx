@@ -27,10 +27,10 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
     <div className="cx">
       <aside className="cx-rail">
         <div className="cx-brand">
-          <div className="mark">SF</div>
+          <div className="mark">S</div>
           <div>
             <b>SynthForge</b>
-            <span>Operations console</span>
+            <span>Operations ledger</span>
           </div>
         </div>
 
@@ -45,6 +45,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="cx-rail-foot">
+          <div>prospectus · book no. 001</div>
           <div>
             <b>{NETWORK.name}</b> · chain {NETWORK.chainId}
           </div>

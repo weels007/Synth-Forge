@@ -1,7 +1,8 @@
 /*
  * The cover: a printed instrument dossier. Bone paper, engraved rules, one
- * rubber stamp. The console behind it is a dark signal room on purpose: the
- * cover is the claim, the console is the instrument you check it with.
+ * rubber stamp. The console (console.css) opens the same document at a later
+ * page: identical substrate, higher density. Navigation should feel like
+ * turning a leaf, so the two stylesheets share every colour and every face.
  */
 
 :root {

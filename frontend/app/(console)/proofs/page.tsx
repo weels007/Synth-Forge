@@ -194,7 +194,7 @@ export default function ProofsPage() {
                   </tr>
                   {open === row.proof_id ? (
                     <tr key={`${row.proof_id}-detail`}>
-                      <td colSpan={7} style={{ background: "#08161c" }}>
+                      <td colSpan={7} style={{ background: "var(--c-panel-2)" }}>
                         <div style={{ display: "grid", gap: 12 }}>
                           <p className="cx-note" style={{ margin: 0 }}>
                             {row.verdict_detail}

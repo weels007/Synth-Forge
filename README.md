@@ -292,17 +292,20 @@ process; the browser has no estimator, so the deploy script publishes the snapsh
 
 ## Frontend
 
-The dashboard is two surfaces with different jobs, so they look different on purpose.
+The dashboard is one document with two densities. Navigation stays inside the same room: same
+bone paper, same ink hairlines, same serif voice and mono figures, so walking from the cover to
+the ledger reads as turning a leaf rather than leaving the product. Only the density changes -
+the cover breathes and the desk is packed.
 
-| Route | Surface | What it is for |
+| Route | Leaf | What it is for |
 | --- | --- | --- |
 | `/` | cover | the printed prospectus: what the instrument is, the live certificate, the limits |
-| `/vault` | console | NAV, positions, book policy, mark-to-market, fund/redeem |
-| `/strategies` | console | the register of drafts, one draft in full, propose a new one |
-| `/proofs` | console | the ledger, filterable, with the evidence behind each row |
-| `/universe` | console | feeds, buckets, per-instrument caps, owner-gated registry |
-| `/dispute` | console | file a challenge, read the latest ruling, reopen the book |
-| `/how-it-works` | console | the three consensus paths, step by step |
+| `/vault` | room | NAV, positions, book policy, mark-to-market, fund/redeem |
+| `/strategies` | room | the register of drafts, one draft in full, propose a new one |
+| `/proofs` | room | the ledger, filterable, with the evidence behind each row |
+| `/universe` | room | feeds, buckets, per-instrument caps, owner-gated registry |
+| `/dispute` | room | file a challenge, read the latest ruling, reopen the book |
+| `/how-it-works` | room | the three consensus paths, step by step |
 
 Reads work without a wallet. Writes need one, and every write notice distinguishes
 `ACCEPTED` from `FINALIZED`, because a Studionet receipt that has not closed its appeal
@@ -318,7 +321,7 @@ scripts/wallet.mjs                keystore loader for deployers and test actors
 scripts/fetchFonts.mjs            re-downloads the dashboard fonts (latin subsets)
 deploy/deployScript.ts            deploy + seed + read-back verification
 deploy/e2eScript.ts               generate → execute → mark → challenge → reopen, prints proofs
-frontend/                         Next.js dashboard: cover page + six-room console
+frontend/                         Next.js dashboard: one dossier - cover leaf + six rooms
 docs/ARCHITECTURE.md              why the contract is shaped this way
 docs/LICENSE                      MIT
 ```

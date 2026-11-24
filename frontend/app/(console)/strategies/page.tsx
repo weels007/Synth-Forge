@@ -200,21 +200,7 @@ export default function StrategiesPage() {
           <div>
             <div className="cx-field">
               <label>prompt wrapper</label>
-              <pre
-                style={{
-                  margin: 0,
-                  padding: 12,
-                  background: "#071319",
-                  border: "1px solid var(--c-line-2)",
-                  maxHeight: 320,
-                  overflow: "auto",
-                  fontFamily: "var(--c-mono)",
-                  fontSize: 10.5,
-                  lineHeight: 1.65,
-                  whiteSpace: "pre-wrap",
-                  color: "var(--c-dim)",
-                }}
-              >
+              <pre className="cx-pre" style={{ maxHeight: 320 }}>
                 {promptText ?? (promptError ? `could not build the prompt: ${promptError}` : "Preview builds the exact prompt the committee will rerun: mandate, universe, policy caps and the JSON contract.")}
               </pre>
             </div>
