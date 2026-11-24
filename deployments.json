@@ -1,0 +1,18 @@
+{
+  "network": "studionet",
+  "rpc": "https://studio.genlayer.com/api",
+  "chainId": 61999,
+  "contract": "SynthForgeVault",
+  "address": "0x562e1E4FBd555a1aE0dF529d543aE4D357A9bA49",
+  "deployTx": "reused",
+  "deployer": "0x3958A649b41cd7C8561F4233cC0F5b0469Bc98E0",
+  "deployedAt": "2026-11-24T04:54:08.135Z",
+  "universe": [
+    "SBTC",
+    "SETH",
+    "SUSD",
+    "SEUR",
+    "SJPY"
+  ],
+  "demoPortfolio": "PF-0001"
+}

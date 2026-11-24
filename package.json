@@ -1,0 +1,20 @@
+{
+  "name": "synthforge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "SynthForge: generative synthetic asset vaults settled on GenLayer.",
+  "scripts": {
+    "deploy": "node deploy/deployScript.ts",
+    "deploy:dry": "node deploy/deployScript.ts --dry-run",
+    "e2e": "node deploy/e2eScript.ts",
+    "test": "python -m pytest -q",
+    "test:live": "node deploy/e2eScript.ts"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "genlayer-js": "^2.0.0"
+  }
+}

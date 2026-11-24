@@ -1,0 +1,51 @@
+{
+  "address": "0x562e1E4FBd555a1aE0dF529d543aE4D357A9bA49",
+  "portfolioId": "PF-0001",
+  "strategyId": "ST-0002",
+  "regime": "RISK_ON",
+  "status": "LIVE",
+  "navAtto": 9.999559573891935e+23,
+  "proofs": [
+    {
+      "id": "PR-0008",
+      "kind": "MARK",
+      "verdict": "ACCEPTED"
+    },
+    {
+      "id": "PR-0007",
+      "kind": "REBALANCE",
+      "verdict": "ACCEPTED"
+    },
+    {
+      "id": "PR-0006",
+      "kind": "STRATEGY_APPROVAL",
+      "verdict": "ACCEPTED"
+    },
+    {
+      "id": "PR-0005",
+      "kind": "CHALLENGE",
+      "verdict": "REVOKE"
+    },
+    {
+      "id": "PR-0004",
+      "kind": "MARK",
+      "verdict": "ACCEPTED"
+    },
+    {
+      "id": "PR-0003",
+      "kind": "REBALANCE",
+      "verdict": "ACCEPTED"
+    },
+    {
+      "id": "PR-0002",
+      "kind": "STRATEGY_APPROVAL",
+      "verdict": "ACCEPTED"
+    },
+    {
+      "id": "PR-0001",
+      "kind": "PORTFOLIO_OPEN",
+      "verdict": "ACCEPTED"
+    }
+  ],
+  "ranAt": "2026-11-24T05:00:26.393Z"
+}

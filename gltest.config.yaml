@@ -1,0 +1,17 @@
+# Integration-test configuration for the GenLayer Testing Suite.
+# Direct-mode tests (tests/direct) never touch the network and ignore this file.
+networks:
+  default: studionet
+
+  studionet:
+    leader_only: false
+
+  localnet:
+    url: "http://127.0.0.1:4000/api"
+    leader_only: false
+
+paths:
+  contracts: "contracts"
+  artifacts: "artifacts"
+
+environment: .env
