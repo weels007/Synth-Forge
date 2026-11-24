@@ -134,7 +134,7 @@ dust can never accumulate into a phantom balance. The direct tests assert to wit
 5. book it: `units = weight * nav // BPS // price`, subtract cash, store `positions`,
 
    `book_weights`, `held_symbols`, bump `rebalances`, set strategy `ACTIVE`, portfolio `ACTIVE`
-6. `_record_proof("EXECUTION", …)` with both digests, NAV before/after and realised turnover
+6. `_record_proof("REBALANCE", …)` with both digests, NAV before/after and realised turnover
 
 `mark_to_market` is the same consensus step without the trade: it reprices the held symbols,
 recomputes NAV, stamps `last_mark_at`, and records a `MARK` proof. Neither method lets the
@@ -144,11 +144,12 @@ caller pass prices in — the contract always fetches them itself.
 
 | `kind` | Written by | Verdict |
 | --- | --- | --- |
-| `PORTFOLIO_OPEN` | `open_portfolio` | `OPENED` |
-| `DEPOSIT` | `fund_portfolio` | `FILLED` |
-| `REDEEM` | `redeem_shares` | `FILLED` |
-| `EXECUTION` | `execute_strategy` | `FILLED` |
-| `MARK` | `mark_to_market` | `MARKED` |
+| `PORTFOLIO_OPEN` | `open_portfolio` | `ACCEPTED` |
+| `DEPOSIT` | `fund_portfolio` | `ACCEPTED` |
+| `REDEMPTION` | `redeem_shares` | `ACCEPTED` |
+| `STRATEGY_APPROVAL` | `generate_strategy` | `ACCEPTED` |
+| `REBALANCE` | `execute_strategy` | `ACCEPTED` |
+| `MARK` | `mark_to_market` | `ACCEPTED` |
 | `CHALLENGE` | `challenge_strategy` | `UPHOLD` / `REVOKE` |
 
 Each row stores `allocation_digest` (sha256 of the booked weight map), `input_digest` (sha256

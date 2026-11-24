@@ -28,6 +28,8 @@ A full lifecycle already ran against that address, one transaction per stage:
 A second strategy (`ST-0002`) was then generated and executed, which is how the live portfolio
 ends at `LIVE` with 8 proofs and one revoked predecessor in its register.
 
+![The dashboard reading the live vault](docs/dashboard.png)
+
 ---
 
 ## Ringkasan (ID)
@@ -173,12 +175,13 @@ for a given thesis, which is what makes the model call auditable rather than mys
 
 ## Execution proofs
 
-A proof is written on every state transition that moved money or changed the book:
+One row per state transition that moved money or changed the book — `PORTFOLIO_OPEN`,
+`DEPOSIT`, `REDEMPTION`, `STRATEGY_APPROVAL`, `REBALANCE`, `MARK`, `CHALLENGE`:
 
 ```json
 {
-  "proof_id": "PR-0004",
-  "kind": "EXECUTION",
+  "proof_id": "PR-0003",
+  "kind": "REBALANCE",
   "portfolio_id": "PF-0001",
   "strategy_id": "ST-0001",
   "allocation_digest": "sha256 of the booked weights",
@@ -186,8 +189,8 @@ A proof is written on every state transition that moved money or changed the boo
   "nav_before_atto": 1000000000000000000000000,
   "nav_after_atto": 999999999999999000000000,
   "weight_l1_bps": 2100,
-  "verdict": "FILLED",
-  "verdict_detail": "clamped SGOLD 4000 -> 2500 bps, high-risk sleeve 2700 bps",
+  "verdict": "ACCEPTED",
+  "verdict_detail": "executed under validator-attested prices",
   "executor": "0x...",
   "created_at": "2025-…"
 }
