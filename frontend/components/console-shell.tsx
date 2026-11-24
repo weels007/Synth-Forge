@@ -2,25 +2,33 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { createElement } from "react";
 
 import { NETWORK, short } from "../lib/synthforge";
+import { ConsoleDeck } from "./console-deck";
+import DisputeRoom from "./rooms/dispute";
+import HowItWorksRoom from "./rooms/how-it-works";
+import ProofsRoom from "./rooms/proofs";
+import StrategiesRoom from "./rooms/strategies";
+import UniverseRoom from "./rooms/universe";
+import VaultRoom from "./rooms/vault";
 import { usePortfolio, useVault } from "./vault-context";
 
-const PAGES: { href: string; index: string; label: string; title: string; blurb: string }[] = [
-  { href: "/vault", index: "01", label: "Vault", title: "Vault overview", blurb: "One book, its status, its positions" },
-  { href: "/strategies", index: "02", label: "Strategies", title: "Strategy desk", blurb: "Propose, execute, inspect" },
-  { href: "/proofs", index: "03", label: "Proofs", title: "Proof ledger", blurb: "Every transition and the inputs behind it" },
-  { href: "/universe", index: "04", label: "Universe", title: "Synthetic universe", blurb: "Feeds, buckets and caps" },
-  { href: "/dispute", index: "05", label: "Dispute", title: "Dispute room", blurb: "Challenge a book, read the ruling" },
-  { href: "/how-it-works", index: "06", label: "How it works", title: "How the consensus works", blurb: "The three paths to agreement" },
+const PAGES = [
+  { href: "/vault", index: "01", label: "Vault", title: "Vault overview", blurb: "One book, its status, its positions", Room: VaultRoom },
+  { href: "/strategies", index: "02", label: "Strategies", title: "Strategy desk", blurb: "Propose, execute, inspect", Room: StrategiesRoom },
+  { href: "/proofs", index: "03", label: "Proofs", title: "Proof ledger", blurb: "Every transition and the inputs behind it", Room: ProofsRoom },
+  { href: "/universe", index: "04", label: "Universe", title: "Synthetic universe", blurb: "Feeds, buckets and caps", Room: UniverseRoom },
+  { href: "/dispute", index: "05", label: "Dispute", title: "Dispute room", blurb: "Challenge a book, read the ruling", Room: DisputeRoom },
+  { href: "/how-it-works", index: "06", label: "How it works", title: "How the consensus works", blurb: "The three paths to agreement", Room: HowItWorksRoom },
 ];
 
-export function ConsoleShell({ children }: { children: ReactNode }) {
+export function ConsoleShell() {
   const pathname = usePathname();
   const { address, wallet, connect, reload, loading, snapshot, notice } = useVault();
   const { portfolio } = usePortfolio();
-  const current = PAGES.find((page) => pathname?.startsWith(page.href)) ?? PAGES[0];
+  const active = Math.max(0, PAGES.findIndex((page) => pathname?.startsWith(page.href)));
+  const current = PAGES[active];
   const paused = snapshot?.info?.paused;
 
   return (
@@ -36,7 +44,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
 
         <nav className="cx-nav">
           {PAGES.map((page) => (
-            <Link key={page.href} href={page.href} data-active={pathname?.startsWith(page.href) ? "true" : "false"}>
+            <Link key={page.href} href={page.href} data-active={page.href === current.href ? "true" : "false"}>
               <i>{page.index}</i>
               <span>{page.label}</span>
               <b>›</b>
@@ -58,7 +66,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
       </aside>
 
       <main className="cx-main">
-        <header className="cx-top">
+        <header className="cx-top" key={current.href}>
           <div>
             <div className="eyebrow">
               {current.index} · {current.blurb}
@@ -90,7 +98,16 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
               {notice.status ? <div className="stamp-line">{notice.status} receipts are reorg-visible until finalized</div> : null}
             </div>
           ) : null}
-          {children}
+
+          <ConsoleDeck
+            active={active}
+            leaves={PAGES.map((page) => ({
+              href: page.href,
+              index: page.index,
+              label: page.label,
+              node: createElement(page.Room),
+            }))}
+          />
         </div>
       </main>
     </div>

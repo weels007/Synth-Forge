@@ -292,10 +292,14 @@ process; the browser has no estimator, so the deploy script publishes the snapsh
 
 ## Frontend
 
-The dashboard is one document with two densities. Navigation stays inside the same room: same
-bone paper, same ink hairlines, same serif voice and mono figures, so walking from the cover to
-the ledger reads as turning a leaf rather than leaving the product. Only the density changes -
-the cover breathes and the desk is packed.
+The dashboard is one document with two densities. The six rooms are mounted together inside one
+deck, so pressing a room slides the next leaf in from the side instead of replacing the page: the
+rail, the masthead and the wallet keep their place, and only the leaf moves. The URL still names
+the leaf you are on, so every room can be linked to and reloaded; `←` and `→` walk the deck, and
+the double-rule foot prints `03 / 06` beside the two ways onward. Same bone paper, same ink
+hairlines, same serif voice and mono figures throughout, so moving from the cover to the ledger
+reads as turning a leaf rather than leaving the product. Only the density changes - the cover
+breathes and the desk is packed.
 
 | Route | Leaf | What it is for |
 | --- | --- | --- |
@@ -321,7 +325,7 @@ scripts/wallet.mjs                keystore loader for deployers and test actors
 scripts/fetchFonts.mjs            re-downloads the dashboard fonts (latin subsets)
 deploy/deployScript.ts            deploy + seed + read-back verification
 deploy/e2eScript.ts               generate → execute → mark → challenge → reopen, prints proofs
-frontend/                         Next.js dashboard: one dossier - cover leaf + six rooms
+frontend/                         Next.js dashboard: one dossier - cover leaf + a six-leaf deck
 docs/ARCHITECTURE.md              why the contract is shaped this way
 docs/LICENSE                      MIT
 ```

@@ -421,13 +421,67 @@
   .cx-note, .cx-kv dd, .cx-hint, .cx-table td, .cx-table th, .cx-empty { overflow-wrap: anywhere; }
   .cx-table th { white-space: normal; }
 }
-/* a room is a turned leaf, not a new document: the body settles in while the
-   rail and the masthead stay put. */
-@keyframes cx-leaf {
-  from { opacity: 0; transform: translateY(5px); }
+/* ---------- the deck: one folio, six leaves ----------
+
+   The rooms are all mounted; the deck slides sideways and the active leaf keeps
+   the flow height. Pressing a room therefore moves the book - the rail, the
+   masthead and the wallet keep their place - instead of loading a new page. */
+.cx-deck-wrap { position: relative; }
+/* clip keeps the off-stage leaves from growing the page; hidden is the same
+   containment for engines without clip */
+.cx-deck { position: relative; overflow: hidden; overflow: clip; }
+.cx-slide {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  opacity: 0;
+  transform: translateX(100%);
+  /* the outgoing leaf clears quickly so two translucent pages never sit at
+     half strength on top of each other mid-turn */
+  transition: transform 380ms cubic-bezier(0.22, 0.61, 0.36, 1), opacity 170ms ease;
+}
+.cx-slide[data-state="before"] { transform: translateX(-100%); }
+.cx-slide[data-state="after"] { transform: translateX(100%); }
+.cx-slide[data-state="active"] {
+  position: relative;
+  z-index: 2;
+  opacity: 1;
+  transform: none;
+}
+
+/* the leaf edge: the page counter and the two ways onward */
+.cx-leaf-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 13px;
+  border-top: 3px double var(--c-rule-strong);
+}
+.cx-leaf-count {
+  font-family: var(--c-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--c-faint);
+  text-align: center;
+}
+
+/* the masthead settles when the title changes; the page below it slides */
+@keyframes cx-title {
+  from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: none; }
 }
-.cx-body { animation: cx-leaf 220ms cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+.cx-top h1, .cx-top .eyebrow { animation: cx-title 260ms ease both; }
+
 @media (prefers-reduced-motion: reduce) {
-  .cx-body { animation: none; }
+  .cx-slide, .cx-top h1, .cx-top .eyebrow { transition: none; animation: none; }
+}
+
+@media (max-width: 620px) {
+  .cx-leaf-nav { gap: 8px; }
+  .cx-leaf-nav .cx-btn { padding: 7px 9px; font-size: 10px; }
+  .cx-leaf-count { font-size: 9px; letter-spacing: 0.1em; }
 }

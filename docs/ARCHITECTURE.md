@@ -270,13 +270,18 @@ each write needs an explicit fee deposit: Studionet charges one, the SDK sends z
 and the browser has no estimator — so `deploy/deployScript.ts` publishes the fee snapshot it
 used to `frontend/public/fees.json` and the UI reuses it.
 
-It is one document, opened at different pages. `/` is the prospectus leaf: the instrument, the
-live certificate, and the honest limits, because a synthetic-asset product is still a document.
-`/vault`, `/strategies`, `/proofs`, `/universe`, `/dispute` and `/how-it-works` are the rooms you
-check it in, each owning one question. They share the cover's substrate on purpose - the same
-bone paper, ink hairlines, engraved section rules, serif voice for headings and mono for every
-number - so following the rail reads as turning a leaf, not as arriving in a different product.
-What changes between them is density, not identity: the cover breathes, the desk is packed.
+It is one document. `/` is the prospectus leaf: the instrument, the live certificate, and the
+honest limits, because a synthetic-asset product is still a document. `/vault`, `/strategies`,
+`/proofs`, `/universe`, `/dispute` and `/how-it-works` are the rooms you check it in, each owning
+one question - and they are one deck rather than six pages. All six are mounted inside the console
+frame; only the active leaf is in flow, the rest wait off to the side, and changing rooms
+translates the deck sideways in 380 ms. The rail and the masthead are part of the frame, so they
+never re-render away. Each room is still a real URL: the deck is driven by the pathname, so a
+bookmarked room opens directly on its leaf, the back button walks the same leaves, and `←` / `→`
+do it from the keyboard. They share the cover's substrate on purpose - the same bone paper, ink
+hairlines, engraved section rules, serif voice for headings and mono for every number - so
+following the rail reads as turning a leaf, not as arriving in a different product. What changes
+between them is density, not identity: the cover breathes, the desk is packed.
 
 The address is resolved from `frontend/public/deployment.json`, written by the deploy script.
 `NEXT_PUBLIC_SYNTHFORGE_ADDRESS` is only a fallback, so the console cannot keep reading an older
