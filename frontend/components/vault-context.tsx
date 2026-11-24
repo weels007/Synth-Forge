@@ -49,6 +49,8 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const addressRef = useRef(address);
+  // Once a book has been read, a failed poll is a stale mark, not a missing book.
+  const hasData = useRef(false);
 
   addressRef.current = address;
 
@@ -62,9 +64,12 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     try {
       setSnapshot(await loadSnapshot(target));
+      hasData.current = true;
       setError(null);
     } catch (loadError) {
-      setError(message(loadError));
+      // A snapshot costs seven reads; a public node that rate-limits a poll must
+      // not blank a book that was already on screen.
+      if (!hasData.current) setError(message(loadError));
     } finally {
       setLoading(false);
     }
@@ -89,9 +94,13 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
     };
   }, [reload]);
 
-  // A desk left open should not show a stale book.
+  // A desk left open should not show a stale book - but a tab left in the
+  // background should not spend the node's hourly read budget either.
   useEffect(() => {
-    const timer = setInterval(() => void reload(), 45000);
+    const timer = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      void reload();
+    }, 120000);
     return () => clearInterval(timer);
   }, [reload]);
 
