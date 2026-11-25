@@ -13,7 +13,9 @@ export default function DisputeRoom() {
   const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
 
-  const portfolioId = portfolio?.portfolio_id ?? "PF-0001";
+  // No invented id: until the snapshot lands there is no portfolio to name.
+  const portfolioId = portfolio?.portfolio_id ?? "";
+  // The contract publishes its minimum; 40 is only its documented default.
   const minChars = info?.min_reason_chars ?? 40;
   const openDrafts = strategies.filter((row) => row.status === "ACTIVE" && !row.adjudicated);
   const target = openDrafts.find((row) => row.strategy_id === strategyId) ?? openDrafts[0] ?? null;
@@ -77,7 +79,7 @@ export default function DisputeRoom() {
                 <button
                   className="cx-btn"
                   data-tone="danger"
-                  disabled={!wallet || busy !== null || reason.trim().length < minChars || !target}
+                  disabled={!wallet || busy !== null || !portfolioId || reason.trim().length < minChars || !target}
                   onClick={() => {
                     if (!target) return;
                     void act("challenge_strategy", [portfolioId, target.strategy_id, reason], "challenge_strategy");
@@ -152,7 +154,7 @@ export default function DisputeRoom() {
               A revoke cleared the active strategy and parked the book. Reopening restores it to LIVE with no strategy
               attached, and records who did it and why. Generate and execute a fresh draft afterwards.
             </p>
-            <Field label="reopen note" hint="at least 40 characters; it lands in the proof evidence">
+            <Field label="reopen note" hint={`at least ${minChars} characters; it lands in the proof evidence`}>
               <textarea
                 value={note}
                 onChange={(event) => setNote(event.target.value)}
@@ -162,7 +164,7 @@ export default function DisputeRoom() {
             <button
               className="cx-btn"
               data-tone="primary"
-              disabled={!wallet || busy !== null || note.trim().length < 40}
+              disabled={!wallet || busy !== null || !portfolioId || note.trim().length < minChars}
               onClick={() => void act("reopen_portfolio", [portfolioId, note], "reopen_portfolio")}
             >
               {busy === "reopen_portfolio" ? "reopening…" : "reopen portfolio"}

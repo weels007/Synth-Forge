@@ -121,8 +121,8 @@ export default function HowItWorksRoom() {
           <div style={{ marginTop: 14 }}>
             <KeyValue
               rows={[
-                ["per-leg band", info ? `${info.max_weight_delta_bps} bps` : "500 bps"],
-                ["L1 band", info ? `${info.max_l1_delta_bps} bps` : "1200 bps"],
+                ["per-leg band", info ? `${info.max_weight_delta_bps} bps` : "—"],
+                ["L1 band", info ? `${info.max_l1_delta_bps} bps` : "—"],
                 ["regime", "exact match"],
                 ["instrument set", "exact match"],
                 ["on mismatch", "round rotates, no state written"],
@@ -140,7 +140,7 @@ export default function HowItWorksRoom() {
           <div style={{ marginTop: 14 }}>
             <KeyValue
               rows={[
-                ["tolerance", info ? `${info.price_tolerance_bps} bps` : "150 bps"],
+                ["tolerance", info ? `${info.price_tolerance_bps} bps` : "—"],
                 ["source", "registered URL + dot path"],
                 ["on digest", "symbol | url | path : price"],
                 ["on failure", "[EXTERNAL] or [TRANSIENT], retried by the round"],

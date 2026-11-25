@@ -18,8 +18,8 @@ function toAtto(input: string): string {
 export default function VaultRoom() {
   const { snapshot, error, loading, act, busy, wallet } = useVault();
   const { portfolio, active, positions, info } = usePortfolio();
-  const [fundAmount, setFundAmount] = useState("25000");
-  const [redeemShares, setRedeemShares] = useState("1000");
+  const [fundAmount, setFundAmount] = useState("");
+  const [redeemShares, setRedeemShares] = useState("");
 
   if (error) {
     return (
@@ -133,7 +133,7 @@ export default function VaultRoom() {
       <div className="cx-split">
         <Panel title="Mark to market" hint="reprice at freshly attested prices">
           <p className="cx-note">
-            Repricing is not a read: validators fetch every source again and must agree within {info?.price_tolerance_bps ?? 150} bps
+            Repricing is not a read: validators fetch every source again and must agree within {info ? `${info.price_tolerance_bps} bps` : "the contract\u2019s tolerance"}
             before the NAV moves. The mark leaves a proof carrying the sources it used.
           </p>
           <div className="cx-row" style={{ marginTop: 12 }}>
@@ -152,7 +152,7 @@ export default function VaultRoom() {
               </Field>
               <button
                 className="cx-btn"
-                disabled={!wallet || busy !== null}
+                disabled={!wallet || busy !== null || fundAmount.trim() === ""}
                 onClick={() => {
                   try {
                     void act("fund_portfolio", [portfolio.portfolio_id, toAtto(fundAmount)], "fund_portfolio");
@@ -171,7 +171,7 @@ export default function VaultRoom() {
               <button
                 className="cx-btn"
                 data-tone="ghost"
-                disabled={!wallet || busy !== null}
+                disabled={!wallet || busy !== null || redeemShares.trim() === ""}
                 onClick={() => void act("redeem_shares", [portfolio.portfolio_id, toAtto(redeemShares)], "redeem_shares")}
               >
                 redeem

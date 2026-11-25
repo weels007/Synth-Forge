@@ -3,31 +3,35 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { NETWORK, formatGen, loadDeployment, loadSnapshot, short, type Snapshot } from "../../lib/synthforge";
+import { NETWORK, formatGen, loadDeployment, loadSnapshot, short, type Snapshot, type SystemInfo } from "../../lib/synthforge";
 
-const PATHS = [
-  {
-    n: "Path one",
-    title: "The strategy is agreed, not trusted",
-    body:
-      "A model drafts the book from the mandate and the attested universe. Every validator re-runs the same prompt and must land on the same regime, the same instruments, and weights within 500 bps per leg (1,200 bps L1) before any state moves.",
-    rule: "gl.vm.run_nondet_unsafe · leader + validator",
-  },
-  {
-    n: "Path two",
-    title: "Every price is attested at the fill",
-    body:
-      "Each instrument points at a URL and a JSON path. Validators fetch it independently and must agree within 150 bps. The proof stores the exact sources and prices it executed on, so the fill can be re-read years later.",
-    rule: "gl.nondet.web.get · 150 bps tolerance",
-  },
-  {
-    n: "Path three",
-    title: "A challenge is judged on its grounds",
-    body:
-      "Anyone may challenge an active strategy and must state a case. The ruling is compared on the verdict and on the cited violations, a revoke must name at least one, and each strategy is adjudicated once.",
-    rule: "one ruling per strategy · REVOKE needs grounds",
-  },
-];
+/** The bands in the copy are the contract's, not a remembered default. */
+function buildPaths(info: SystemInfo | null | undefined) {
+  const band = info
+    ? `${info.max_weight_delta_bps} bps per leg (${info.max_l1_delta_bps.toLocaleString('en-US')} bps L1)`
+    : `the contract's per-leg and L1 bands`;
+  const tolerance = info ? `${info.price_tolerance_bps} bps` : `the contract's tolerance`;
+  return [
+    {
+      n: `Path one`,
+      title: `The strategy is agreed, not trusted`,
+      body: `A model drafts the book from the mandate and the attested universe. Every validator re-runs the same prompt and must land on the same regime, the same instruments, and weights within ${band} before any state moves.`,
+      rule: `gl.vm.run_nondet_unsafe · leader + validator`,
+    },
+    {
+      n: `Path two`,
+      title: `Every price is attested at the fill`,
+      body: `Each instrument points at a URL and a JSON path. Validators fetch it independently and must agree within ${tolerance}. The proof stores the exact sources and prices it executed on, so the fill can be re-read years later.`,
+      rule: info ? `gl.nondet.web.get · ${info.price_tolerance_bps} bps tolerance` : `gl.nondet.web.get · attested price`,
+    },
+    {
+      n: `Path three`,
+      title: `A challenge is judged on its grounds`,
+      body: `Anyone may challenge an active strategy and must state a case. The ruling is compared on the verdict and on the cited violations, a revoke must name at least one, and each strategy is adjudicated once.`,
+      rule: `one ruling per strategy · REVOKE needs grounds`,
+    },
+  ];
+}
 
 const INDEX = [
   { href: "/vault", index: "01", label: "Vault", sub: "Status, NAV, positions, mark to market" },
@@ -68,6 +72,7 @@ export default function CoverPage() {
   const strategies = snapshot?.strategies?.length ?? 0;
   const consensus = snapshot?.info;
   const live = portfolio?.status === "LIVE" || portfolio?.status === "OPEN";
+  const paths = buildPaths(consensus);
 
   return (
     <div className="page">
@@ -139,7 +144,7 @@ export default function CoverPage() {
         <span>equivalence principle</span>
       </div>
       <div className="paths">
-        {PATHS.map((path) => (
+        {paths.map((path) => (
           <article className="path" key={path.n}>
             <div className="n">{path.n}</div>
             <h3>{path.title}</h3>
