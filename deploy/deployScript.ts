@@ -12,7 +12,8 @@
  *   node deploy/deployScript.ts --skip-seed        # deploy only
  *   node deploy/deployScript.ts --address 0x...    # seed an existing deployment
  *
- * The deployer key comes from the keystores in D:\Genlayer-project\weels\wallet
+ * The deployer key comes from the sibling keystore folder ../wallet
+ * (override the directory with SYNTHFORGE_WALLET_DIR)
  * (name default "global", override with --wallet or SYNTHFORGE_WALLET). The key
  * is decrypted in memory, never written to disk. DEPLOYER_PRIVATE_KEY still
  * overrides everything for CI use.

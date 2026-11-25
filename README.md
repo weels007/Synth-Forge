@@ -311,7 +311,7 @@ npm install && pip install -r requirements.txt
 pytest
 
 # 2. deploy and seed the universe on Studionet, signing with the project wallet
-#    (keystores live in D:\Genlayer-project\weels\wallet, one <name>-keystore.json
+#    (keystores live in ../wallet, next to this checkout: one <name>-keystore.json
 #     plus <name>.password each; the key is decrypted in memory and never copied)
 node deploy/deployScript.ts --wallet tester1
 

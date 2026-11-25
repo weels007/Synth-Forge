@@ -4,9 +4,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { privateKeyToAccount } from "viem/accounts";
 
-const DEFAULT_DIR = "D:\\Genlayer-project\\weels\\wallet";
+// Resolved next to the checkout, so no machine path is baked into the source:
+// <repo>/../wallet, or SYNTHFORGE_WALLET_DIR when the keys live elsewhere.
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const DEFAULT_DIR = path.join(REPO_ROOT, "..", "wallet");
 
 export function walletDir() {
   return process.env.SYNTHFORGE_WALLET_DIR || DEFAULT_DIR;
