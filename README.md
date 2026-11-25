@@ -9,11 +9,12 @@ challenge as an execution proof that anyone can re-verify.
 | | |
 | --- | --- |
 | Network | Studionet · chain `61999` |
-| Contract | [`0xDB6ABF2b2716959D79fFFD8dc2Be508b506cF696`](https://explorer-studio.genlayer.com/address/0xDB6ABF2b2716959D79fFFD8dc2Be508b506cF696) |
-| Deploy tx | [`0x66282a5a…74dea7`](https://explorer-studio.genlayer.com/tx/0x66282a5a0f368d01e079e2e1b731c7ac6d75629d878837f53af0152dcd74dea7) |
+| Contract | [`0x92c2C957E84a264c6f1B435a064c54D3D547DAdD`](https://explorer-studio.genlayer.com/address/0x92c2C957E84a264c6f1B435a064c54D3D547DAdD) |
+| Deploy tx | [`0x09e18606…e82dde`](https://explorer-studio.genlayer.com/tx/0x09e186067b88837f76159421c968fb9c1c6402a73fb968dfb113da95c5e82dde) |
+| Owner | [`0xE8b3e800…0Af5a`](https://explorer-studio.genlayer.com/address/0xE8b3e800d08727D25156a44cD1609F793bd0Af5a) · `tester1` keystore in `../wallet` |
 | Runner | `py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6` |
-| Seeded state | 6 instruments · 1 portfolio (`PF-0001`, 1,000,000 GEN paper capital) · 5 proofs |
-| Registry | 2 symbols filed by a non-owner wallet: 1 activated, 1 still pending |
+| Seeded state | 6 instruments · 1 portfolio (`PF-0001`, 1,000,000 GEN paper capital) · 1 strategy · 5 proofs |
+| Registry | 2 symbols filed by the non-owner wallet `tester2`: 1 activated, 1 still pending |
 | Direct tests | 79 passing (`pytest tests/direct`) |
 
 That deployed contract was not read from a fixture: every row below ran against it on
@@ -23,24 +24,27 @@ Studionet, in this order.
 | --- | --- |
 | `register_asset` ×5 | `SBTC`, `SETH`, `SUSD`, `SEUR`, `SJPY` with their real feeds |
 | `open_portfolio` | `PF-0001` · BALANCED · 1,000,000 GEN paper capital |
-| `generate_strategy` | `ST-0001` accepted by the committee: `RISK_ON`, 5 legs, confidence 60% |
-| `execute_strategy` | 5 legs filled at attested prints, 5000 bps turnover |
-| `mark_to_market` | NAV 1,000,000 → 1,000,156.91 GEN |
+| `generate_strategy` | `ST-0001` accepted by the committee: `RISK_ON`, 5 legs, confidence 68% |
+| `execute_strategy` | 5 legs filled at the attested prints, one rebalance |
+| `mark_to_market` | NAV 1,000,000 → 999,845.17 GEN |
 | `challenge_strategy` | ruled `UPHOLD` - one adjudication, recorded on `PR-0005` |
-| `propose_asset` SGBP | filed by `0x172a…D976` (not the owner), stored `PENDING` at `1.3098` |
+| `propose_asset` SGBP | filed by `0x0C0F…C1Ad` (not the owner), stored `PENDING` at `1.3098` |
 | `activate_asset` SGBP | owner re-probed the feed and activated it; universe is now 6 |
 | `propose_asset` SAUD | filed by the same outside wallet, still `PENDING` at `0.6641` |
 
-The paths a symbol may *not* take were tested on the same address, and each one failed with
-the contract's own message, not a generic revert:
+The paths a symbol may *not* take were tried on the same address. Each one is a GenVM error,
+not a generic revert, and each left the state it names untouched; the exact
+`[EXPECTED]`/`[EXTERNAL]` strings are asserted in `tests/direct/test_registry_proposals.py`.
 
-| Attempt | Live response |
+| Attempt | What the live vault did |
 | --- | --- |
-| outside wallet calls `activate_asset` | `[EXPECTED] only the vault owner can activate a proposed asset` |
-| file `SBTC` again | `[EXPECTED] asset already registered: SBTC` |
-| file a symbol whose feed 404s | `[EXTERNAL] feed rejected the request (404)` - nothing stored |
-| activate an already-active symbol | `[EXPECTED] asset already registered: SGBP` |
-| reject with a one-word note | `[EXPECTED] rejection note must say why, at least 12 characters` |
+| outside wallet calls `activate_asset` | refused at the owner gate; SGBP stayed `PENDING`, nothing activated |
+| file `SBTC` again | refused; the universe stayed at 6 rows, no duplicate instrument |
+| file a symbol whose feed 404s | consensus aborted the probe; the transaction finalized `Undetermined` and nothing was stored |
+| activate an already-active symbol | refused; SGBP unchanged |
+| reject `SAUD` with a one-word note | refused on note length; the proposal stayed `PENDING` |
+| reject `SAUD` with a written note | accepted; `SAUD` became `REJECTED` with the reason kept on the record |
+| file the rejected `SAUD` again | accepted; back to `PENDING` at a fresh probe print, `0.6641` |
 
 ![The dashboard reading the live vault](docs/dashboard.png)
 
@@ -205,7 +209,7 @@ any wallet ─ propose_asset ──┤ consensus feed probe ──► PENDING
 register_asset (owner) ──┐
                  ├── open_portfolio ──► fund / redeem / transfer shares
                  │            │
-                 │            ├── generate_strategy ──► strategy PROPOSED
+                 │            ├── generate_strategy ──► strategy ACTIVE (a draft until executed)
                  │            │            │
                  │            │            ├── execute_strategy ──► positions + ACTIVE + proof
                  │            │            │            │
@@ -273,20 +277,20 @@ One row per state transition that moved money or changed the book — `PORTFOLIO
   "kind": "CHALLENGE",
   "portfolio_id": "PF-0001",
   "strategy_id": "ST-0001",
-  "allocation_digest": "sha256 of the reviewed weights",
-  "input_digest": "sha256 of the adjudication prompt",
-  "nav_before_atto": 1000081362696000000000000,
-  "nav_after_atto": 1000081362696000000000000,
+  "allocation_digest": "05804a1581ceb2a1f8b25cdbc70e9b391e1f1d8680b7860407d2c1ab75abf0a2",
+  "input_digest": "9b38452f72ab04b178bde4981faf4b8afdefe535b30edae85372892df0b47313",
+  "nav_before_atto": 999845172844320335675641,
+  "nav_after_atto": 999845172844320335675641,
   "weight_l1_bps": 0,
-  "verdict": "REVOKE",
-  "verdict_detail": "REVOKE [MANDATE_DRIFT,MISSING_HEDGE]: the mandate requires a real long-vol sleeve…",
+  "verdict": "UPHOLD",
+  "verdict_detail": "UPHOLD: The book sums to 10000 bps, no single asset exceeds 4000 bps, and the HIGH sleeve (SBTC 1500 + SETH 1000) is exactly at the 2500 cap, not over it. The mandate pairs FX carry with BTC beta, so crypto exposure is intended. It requires no separate hedge. The challenge names no real breach.",
   "evidence": {
-    "violations": ["MANDATE_DRIFT", "MISSING_HEDGE"],
-    "allocation": { "SBTC": 1500, "SETH": 1000, "SUSD": 3500, "SEUR": 2000, "SJPY": 2000 },
-    "prompt_digest": "176256b3…"
+    "violations": [],
+    "allocation": { "SBTC": 1500, "SETH": 1000, "SEUR": 2500, "SJPY": 1000, "SUSD": 4000 },
+    "prompt_digest": "9b38452f…"
   },
   "executor": "0x0C0Fd005…",
-  "created_at": "2026-11-24T05:40:50Z"
+  "created_at": "2026-11-25T12:06:16Z"
 }
 ```
 
@@ -306,11 +310,13 @@ npm install && pip install -r requirements.txt
 # 1. run the unit suite (no network, direct mode)
 pytest
 
-# 2. deploy and seed the universe on Studionet
-node deploy/deployScript.ts
+# 2. deploy and seed the universe on Studionet, signing with the project wallet
+#    (keystores live in D:\Genlayer-project\weels\wallet, one <name>-keystore.json
+#     plus <name>.password each; the key is decrypted in memory and never copied)
+node deploy/deployScript.ts --wallet tester1
 
 # 3. drive one full lifecycle against the live contract
-node deploy/e2eScript.ts --address 0x3B60…3060
+node deploy/e2eScript.ts --address 0x92c2C957E84a264c6f1B435a064c54D3D547DAdD
 
 # 4. dashboard
 cd frontend && npm install && npm run dev
