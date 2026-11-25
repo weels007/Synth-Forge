@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  NETWORK,
   connectWallet,
   loadDeployment,
   loadSnapshot,
@@ -40,6 +41,9 @@ function message(error: unknown): string {
   // A public node caps reads per hour; say so plainly and say who retries.
   if (/rate limit/i.test(text)) {
     return `${text} The console retries on its own every two minutes; nothing is lost.`;
+  }
+  if (/chainId should be same/i.test(text)) {
+    return `The wallet is on a different chain than ${NETWORK.name} (${NETWORK.chainId}). Switch networks in the wallet, then retry.`;
   }
   return text;
 }
@@ -126,7 +130,7 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
       setBusy(label);
       setNotice(null);
       try {
-        const result = await submit(wallet.client, addressRef.current, functionName, args);
+        const result = await submit(wallet.client, addressRef.current, functionName, args, wallet.provider);
         setNotice({
           kind: "ok",
           text: `${label} executed: ${result.status}. Accepted is not final until the appeal window closes.`,

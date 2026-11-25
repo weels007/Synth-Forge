@@ -319,6 +319,10 @@ Reads work without a wallet. Writes need one, and every write notice distinguish
 `ACCEPTED` from `FINALIZED`, because a Studionet receipt that has not closed its appeal
 window is not a settled transaction.
 
+Connecting a wallet also moves it to Studionet (`61999`), adding the network first if the
+wallet has never seen it, and the check runs again at signing time: a wallet left on another
+chain is told to switch instead of failing with viem's `chainId should be same as current`.
+
 ### Deploy on Vercel
 
 The dashboard is the `frontend/` directory, so Vercel has to be told which directory is the app:

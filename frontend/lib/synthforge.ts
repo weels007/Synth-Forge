@@ -192,20 +192,77 @@ export async function loadFees(): Promise<Fees> {
   return feeCache;
 }
 
-export type Wallet = { address: string; client: ReturnType<typeof createClient> };
+/** The slice of EIP-1193 the console actually uses. */
+export type EthereumProvider = {
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+};
 
-/** Connect an injected wallet and build a client that can sign contract writes. */
+export type Wallet = { address: string; client: ReturnType<typeof createClient>; provider: EthereumProvider };
+
+/** Studionet as a wallet spells it. */
+const STUDIONET_HEX = `0x${(chains.studionet.id as number).toString(16)}`;
+
+function failure(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** Wallets return hex, some return a decimal; compare numbers, not spellings. */
+function chainOf(raw: unknown): number {
+  if (typeof raw === "number") return raw;
+  const text = String(raw ?? "");
+  return text.startsWith("0x") ? Number.parseInt(text, 16) : Number(text);
+}
+
+/**
+ * Move the wallet onto Studionet before anything is signed.
+ *
+ * A client bound to Studionet talking to a wallet on another chain fails at the
+ * first write with "chainId should be same as current chainId", which tells the
+ * user nothing. Switching first also handles the wallet that has never seen the
+ * network, so it is added in the same gesture.
+ */
+export async function ensureChain(injected: EthereumProvider): Promise<void> {
+  const readable = `Switch the wallet to ${NETWORK.name} (chain ${NETWORK.chainId}) and reconnect.`;
+  if (chainOf(await injected.request({ method: "eth_chainId" })) === NETWORK.chainId) return;
+  try {
+    await injected.request({ method: "wallet_switchEthereumChain", params: [{ chainId: STUDIONET_HEX }] });
+  } catch (error) {
+    const code = (error as { code?: number })?.code;
+    if (code === 4001) throw new Error(`The network switch was rejected in the wallet. ${readable}`);
+    // 4902: the wallet has never seen this chain, so teach it the network.
+    if (code !== 4902) throw new Error(`${failure(error)} ${readable}`);
+    await injected.request({
+      method: "wallet_addEthereumChain",
+      params: [
+        {
+          chainId: STUDIONET_HEX,
+          chainName: chains.studionet.name,
+          nativeCurrency: chains.studionet.nativeCurrency,
+          rpcUrls: [...(chains.studionet.rpcUrls.default.http as readonly string[])],
+          blockExplorerUrls: [NETWORK.explorer],
+        },
+      ],
+    });
+  }
+  const after = chainOf(await injected.request({ method: "eth_chainId" }));
+  if (after !== NETWORK.chainId) {
+    throw new Error(`The wallet is still on chain ${after}, not ${NETWORK.chainId}. ${readable}`);
+  }
+}
+
+/** Connect an injected wallet on Studionet and build a client that can sign writes. */
 export async function connectWallet(): Promise<Wallet> {
-  const injected = (globalThis as any).ethereum;
+  const injected = (globalThis as any).ethereum as EthereumProvider | undefined;
   if (!injected) throw new Error("No injected wallet found. Install MetaMask or use the CLI drivers.");
-  const accounts: string[] = await injected.request({ method: "eth_requestAccounts" });
-  if (!accounts.length) throw new Error("The wallet returned no account.");
+  const accounts = (await injected.request({ method: "eth_requestAccounts" })) as string[];
+  if (!accounts?.length) throw new Error("The wallet returned no account.");
+  await ensureChain(injected);
   const client = createClient({
     chain: chains.studionet,
     account: accounts[0] as `0x${string}`,
     provider: injected as never,
   });
-  return { address: accounts[0], client };
+  return { address: accounts[0], client, provider: injected };
 }
 
 /**
@@ -220,22 +277,33 @@ export async function submit(
   address: string,
   functionName: string,
   args: unknown[],
+  provider?: EthereumProvider,
 ): Promise<{ hash: string; result: unknown; status: string }> {
-  const fees = await loadFees();
-  const hash = await client.writeContract({
-    address: address as `0x${string}`,
-    functionName,
-    args,
-    fees,
-  } as any);
-  const receipt = (await client.waitForTransactionReceipt({ hash: hash as any, status: "ACCEPTED" as any, interval: 4000, retries: 150 } as any)) as any;
-  const leader = receipt?.consensus_data?.leader_receipt?.[0];
-  if (leader && leader.execution_result !== "SUCCESS") {
-    const payload = leader?.result?.payload;
-    throw new Error(`execution ${leader.execution_result}: ${typeof payload === "string" ? payload : JSON.stringify(payload)}`);
+  // The wallet can be moved to another network after connecting; check again
+  // at the moment of signing rather than trusting the state at connect time.
+  if (provider) await ensureChain(provider);
+  try {
+    const fees = await loadFees();
+    const hash = await client.writeContract({
+      address: address as `0x${string}`,
+      functionName,
+      args,
+      fees,
+    } as any);
+    const receipt = (await client.waitForTransactionReceipt({ hash: hash as any, status: "ACCEPTED" as any, interval: 4000, retries: 150 } as any)) as any;
+    const leader = receipt?.consensus_data?.leader_receipt?.[0];
+    if (leader && leader.execution_result !== "SUCCESS") {
+      const payload = leader?.result?.payload;
+      throw new Error(`execution ${leader.execution_result}: ${typeof payload === "string" ? payload : JSON.stringify(payload)}`);
+    }
+    const status = String(receipt?.status_name ?? receipt?.status ?? "ACCEPTED").toUpperCase();
+    return { hash: String(hash), result: leader?.result?.payload ?? null, status };
+  } catch (error) {
+    if (/chainId should be same/i.test(failure(error))) {
+      throw new Error(`The wallet is on a different chain than ${NETWORK.name} (${NETWORK.chainId}). Switch networks and retry.`);
+    }
+    throw error;
   }
-  const status = String(receipt?.status_name ?? receipt?.status ?? "ACCEPTED").toUpperCase();
-  return { hash: String(hash), result: leader?.result?.payload ?? null, status };
 }
 
 /** Read a single view and JSON-decode it, for one-off calls like preview_prompt. */
