@@ -134,7 +134,7 @@ export default function VaultRoom() {
         <Panel title="Mark to market" hint="reprice at freshly attested prices">
           <p className="cx-note">
             Repricing is not a read: validators fetch every source again and must agree within {info ? `${info.price_tolerance_bps} bps` : "the contract\u2019s tolerance"}
-            before the NAV moves. The mark leaves a proof carrying the sources it used.
+            {" "}before the NAV moves. The mark leaves a proof carrying the sources it used.
           </p>
           <div className="cx-row" style={{ marginTop: 12 }}>
             <button className="cx-btn" data-tone="primary" disabled={!wallet || busy !== null} onClick={() => void act("mark_to_market", [portfolio.portfolio_id], "mark_to_market")}>

@@ -8,14 +8,14 @@ import { NETWORK, formatGen, loadDeployment, loadSnapshot, short, type Snapshot,
 /** The bands in the copy are the contract's, not a remembered default. */
 function buildPaths(info: SystemInfo | null | undefined) {
   const band = info
-    ? `${info.max_weight_delta_bps} bps per leg (${info.max_l1_delta_bps.toLocaleString('en-US')} bps L1)`
-    : `the contract's per-leg and L1 bands`;
+    ? `every leg inside its ${info.validator_mode} cap and the full budget spent`
+    : `the contract's own mandate checks`;
   const tolerance = info ? `${info.price_tolerance_bps} bps` : `the contract's tolerance`;
   return [
     {
       n: `Path one`,
       title: `The strategy is agreed, not trusted`,
-      body: `A model drafts the book from the mandate and the attested universe. Every validator re-runs the same prompt and must land on the same regime, the same instruments, and weights within ${band} before any state moves.`,
+      body: `A model drafts the book from the mandate and the attested universe. Validators do not ask it to say the same thing twice: they re-derive the mandate itself, with ${band}, before any state moves.`,
       rule: `gl.vm.run_nondet_unsafe · leader + validator`,
     },
     {
@@ -133,8 +133,8 @@ export default function CoverPage() {
           </div>
           <div className="figure">
             <span>consensus band</span>
-            <strong>{consensus ? `${consensus.max_weight_delta_bps} bps` : "—"}</strong>
-            <em>{consensus ? `L1 ${consensus.max_l1_delta_bps} · prices ${consensus.price_tolerance_bps}` : "per leg · L1 · feed"}</em>
+            <strong>{consensus ? "mandate invariants" : "—"}</strong>
+            <em>{consensus ? `caps · full budget · prices ${consensus.price_tolerance_bps} bps` : "caps · budget · feed"}</em>
           </div>
         </div>
       </section>

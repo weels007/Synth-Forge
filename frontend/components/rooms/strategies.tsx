@@ -193,8 +193,8 @@ export default function StrategiesRoom() {
               </button>
             </div>
             <p className="cx-hint" style={{ marginTop: 10 }}>
-              Generating is a read of the world, not a write of capital: the draft lands as PROPOSED and does nothing
-              until it is executed.
+              Generating is a read of the world, not a write of capital: the draft is stored with its digests and moves
+              nothing until it is executed.
             </p>
           </div>
           <div>

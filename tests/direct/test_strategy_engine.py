@@ -37,7 +37,9 @@ def test_validator_agrees_on_a_consistent_rerun(vault, balanced_portfolio, direc
     assert direct_vm.run_validator() is True
 
 
-def test_validator_rejects_a_divergent_regime(vault, balanced_portfolio, direct_vm, direct_alice):
+def test_validator_accepts_a_divergent_regime(vault, balanced_portfolio, direct_vm, direct_alice):
+    # The model is stochastic, so validators no longer demand a replica of the
+    # leader. A different regime is still a legal regime, so the call stands.
     mock_proposal(direct_vm)
     _generate(vault, direct_vm, direct_alice)
 
@@ -45,46 +47,28 @@ def test_validator_rejects_a_divergent_regime(vault, balanced_portfolio, direct_
     divergent = json.loads(json.dumps(BALANCED_PROPOSAL))
     divergent["regime"] = "RISK_OFF"
     mock_proposal(direct_vm, divergent)
-    assert direct_vm.run_validator() is False
+    assert direct_vm.run_validator() is True
 
 
-def test_validator_rejects_a_divergent_weight(vault, balanced_portfolio, direct_vm, direct_alice):
+def test_validator_accepts_a_different_but_mandate_valid_book(vault, balanced_portfolio, direct_vm, direct_alice):
+    # Different weights and a narrower asset set pass as long as the book adds up
+    # to the full budget and no profile cap is broken.
     mock_proposal(direct_vm)
     _generate(vault, direct_vm, direct_alice)
 
     direct_vm.clear_mocks()
-    drifted = {
-        "regime": "RISK_ON",
-        "allocation": [
-            {"symbol": "SBTC", "weight_bps": 2000},
-            {"symbol": "SGOLD", "weight_bps": 4000},
-            {"symbol": "SSPX", "weight_bps": 1000},
-            {"symbol": "SUSDY", "weight_bps": 3000},
-        ],
-        "confidence_bps": 7200,
-        "rationale": "drifted",
-    }
-    mock_proposal(direct_vm, drifted)
-    assert direct_vm.run_validator() is False
-
-
-def test_validator_rejects_a_different_asset_set(vault, balanced_portfolio, direct_vm, direct_alice):
-    mock_proposal(direct_vm)
-    _generate(vault, direct_vm, direct_alice)
-
-    direct_vm.clear_mocks()
-    different = {
-        "regime": "RISK_ON",
+    narrower = {
+        "regime": "NEUTRAL",
         "allocation": [
             {"symbol": "SGOLD", "weight_bps": 3000},
-            {"symbol": "SSPX", "weight_bps": 4000},
-            {"symbol": "SUSDY", "weight_bps": 3000},
+            {"symbol": "SSPX", "weight_bps": 3000},
+            {"symbol": "SUSDY", "weight_bps": 4000},
         ],
-        "confidence_bps": 7200,
-        "rationale": "different set",
+        "confidence_bps": 6400,
+        "rationale": "narrower book",
     }
-    mock_proposal(direct_vm, different)
-    assert direct_vm.run_validator() is False
+    mock_proposal(direct_vm, narrower)
+    assert direct_vm.run_validator() is True
 
 
 def test_symbols_outside_the_universe_are_rejected(vault, balanced_portfolio, direct_vm, direct_alice):

@@ -20,6 +20,29 @@ export type Asset = {
   added_at: string;
 };
 
+/**
+ * A symbol nobody owns yet. Any wallet may file one; the contract only records
+ * it after a consensus probe lands a live price from the reference feed.
+ */
+export type AssetProposal = {
+  symbol: string;
+  name: string;
+  kind: string;
+  underlying: string;
+  reference_url: string;
+  price_path: string;
+  risk_bucket: string;
+  max_weight_bps: number;
+  status: string;
+  proposed_by: string;
+  proposed_at: string;
+  probe_price_atto: string;
+  probe_digest: string;
+  decided_by: string;
+  decided_at: string;
+  note: string;
+};
+
 export type Portfolio = {
   portfolio_id: string;
   manager: string;
@@ -107,9 +130,12 @@ export type SystemInfo = {
   bps: number;
   atto: number;
   price_tolerance_bps: number;
-  max_weight_delta_bps: number;
-  max_l1_delta_bps: number;
+  /** The rule validators check: caps and a fully spent budget, not a replica. */
+  validator_mode: string;
   min_reason_chars: number;
+  proposals: number;
+  pending_proposals: number;
+  min_rejection_chars: number;
   caps: Record<string, { max_single_bps: number; max_high_bps: number }>;
 };
 
@@ -118,6 +144,7 @@ export type Position = { symbol: string; weight_bps: number; units_atto: number 
 export type Snapshot = {
   info: SystemInfo;
   assets: Asset[];
+  proposals: AssetProposal[];
   portfolios: Portfolio[];
   strategies: Strategy[];
   proofs: Proof[];
@@ -141,6 +168,7 @@ async function read(address: string, functionName: string, args: unknown[] = [])
 export async function loadSnapshot(address: string): Promise<Snapshot> {
   const info = (await read(address, "get_system_info")) as SystemInfo;
   const assets = (await read(address, "list_assets")) as Asset[];
+  const proposals = (await read(address, "list_asset_proposals")) as AssetProposal[];
   const portfolios = (await read(address, "list_portfolios")) as Portfolio[];
 
   const strategies: Strategy[] = [];
@@ -154,7 +182,7 @@ export async function loadSnapshot(address: string): Promise<Snapshot> {
     positions = (await read(address, "get_positions", [portfolioId])) as Position[];
   }
 
-  return { info, assets, portfolios, strategies, proofs, positions, loadedAt: new Date().toISOString() };
+  return { info, assets, proposals, portfolios, strategies, proofs, positions, loadedAt: new Date().toISOString() };
 }
 
 export type Fees = { distribution: Record<string, unknown>; feeValue: string };

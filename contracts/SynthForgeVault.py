@@ -27,13 +27,15 @@ ERROR_LLM = "[LLM_ERROR]"
 
 # Consensus bands. Tight on purpose: the weight vector is the financially
 # binding output, so two nodes that differ materially must not agree.
-MAX_WEIGHT_DELTA_BPS = 500
-MAX_L1_DELTA_BPS = 1200
 PRICE_TOLERANCE_BPS = 150
 MAX_THESIS_CHARS = 2400
 MIN_REASON_CHARS = 40
 MAX_REASON_CHARS = 1200
 MAX_RATIONALE_CHARS = 900
+# A registry proposal is a price feed the whole book will trust, so the owner
+# has to say why it was turned down - an unexplained rejection is not auditable.
+MIN_REJECTION_CHARS = 12
+MAX_REJECTION_CHARS = 400
 
 # Adjudication is decided on a closed vocabulary. Free-text grounds can never
 # reach consensus: two independent model runs phrase the same breach
@@ -168,6 +170,50 @@ def _max_high_bps(profile: str) -> int:
     if profile == "BALANCED":
         return 2500
     return 5000
+
+
+def _asset_key(symbol) -> str:
+    key = str(symbol).strip().upper()
+    if key == "" or len(key) > 16:
+        raise gl.vm.UserError(f"{ERROR_EXPECTED} invalid symbol")
+    for character in key:
+        if not (character.isalnum() or character == "-" or character == "_"):
+            raise gl.vm.UserError(f"{ERROR_EXPECTED} invalid symbol characters")
+    return key
+
+
+def _asset_fields(symbol, name, kind, underlying, reference_url, price_path, risk_bucket, max_weight_bps) -> dict:
+    # One validator for the asset shape, shared by direct registration and by
+    # permissionless proposals, so a proposal can never smuggle in something
+    # register_asset would have refused.
+    key = _asset_key(symbol)
+    kind_key = str(kind).strip().upper()
+    if kind_key not in ("EQUITY", "COMMODITY", "FX", "CRYPTO", "INDEX", "RATE", "BASKET"):
+        raise gl.vm.UserError(f"{ERROR_EXPECTED} invalid asset kind: {kind_key}")
+    bucket = str(risk_bucket).strip().upper()
+    if bucket != "LOW" and bucket != "MEDIUM" and bucket != "HIGH":
+        raise gl.vm.UserError(f"{ERROR_EXPECTED} invalid risk bucket: {bucket}")
+    url = str(reference_url).strip()
+    if not url.startswith("https://") and not url.startswith("http://"):
+        raise gl.vm.UserError(f"{ERROR_EXPECTED} reference_url must be http(s)")
+    path = str(price_path).strip()
+    if path == "":
+        raise gl.vm.UserError(f"{ERROR_EXPECTED} price_path is required")
+    cap = int(max_weight_bps)
+    if cap <= 0 or cap > BPS:
+        raise gl.vm.UserError(f"{ERROR_EXPECTED} max_weight_bps must be within 1..10000")
+    if str(name).strip() == "" or str(underlying).strip() == "":
+        raise gl.vm.UserError(f"{ERROR_EXPECTED} name and underlying are required")
+    return {
+        "symbol": key,
+        "name": str(name).strip(),
+        "kind": kind_key,
+        "underlying": str(underlying).strip(),
+        "reference_url": url,
+        "price_path": path,
+        "risk_bucket": bucket,
+        "max_weight_bps": cap,
+    }
 
 
 def _dig(data, path: str):
@@ -506,26 +552,37 @@ def _normalize_proposal(raw, universe: dict, profile: str) -> dict:
     }
 
 
-def _compare_proposals(leader_proposal, validator_proposal) -> bool:
-    if not isinstance(leader_proposal, dict) or not isinstance(validator_proposal, dict):
+def _proposal_respects_mandate(proposal, universe: dict, profile: str) -> bool:
+    # A stochastic model cannot be replayed node by node, so validators check
+    # what the mandate actually pins down: a known regime, a book of known
+    # assets that spends the whole budget and never breaks a profile cap.
+    if not isinstance(proposal, dict):
         return False
-    if str(leader_proposal.get("regime", "")) != str(validator_proposal.get("regime", "")):
+    if str(proposal.get("regime", "")) not in ("RISK_ON", "NEUTRAL", "RISK_OFF"):
         return False
-    leader_weights = leader_proposal.get("weights")
-    validator_weights = validator_proposal.get("weights")
-    if not isinstance(leader_weights, dict) or not isinstance(validator_weights, dict):
+    weights = proposal.get("weights")
+    if not isinstance(weights, dict) or len(weights) < 2:
         return False
-    if sorted(leader_weights.keys()) != sorted(validator_weights.keys()):
+    clean = {}
+    total = 0
+    try:
+        for symbol in sorted(weights.keys()):
+            if symbol not in universe:
+                return False
+            value = int(weights[symbol])
+            if value < 0:
+                return False
+            clean[symbol] = value
+            total += value
+        confidence = int(proposal.get("confidence_bps", 0))
+    except Exception:
         return False
-    total_delta = 0
-    for symbol in leader_weights.keys():
-        delta = int(leader_weights[symbol]) - int(validator_weights[symbol])
-        if delta < 0:
-            delta = -delta
-        if delta > MAX_WEIGHT_DELTA_BPS:
-            return False
-        total_delta += delta
-    return total_delta <= MAX_L1_DELTA_BPS
+    if total != BPS or confidence < 0 or confidence > BPS:
+        return False
+    try:
+        return _apply_caps(clean, universe, profile) == clean
+    except Exception:
+        return False
 
 
 def _known_violations(raw) -> list:
@@ -811,6 +868,14 @@ class SynthForgeVault(gl.Contract):
     assets: TreeMap[str, SyntheticAsset]
     asset_symbols: DynArray[str]
 
+    # Proposals are the permissionless half of the registry: anyone may put a
+    # feed forward, consensus checks that it actually prices something, and
+    # the owner carries the canonical decision. Kept as JSON so the probe
+    # evidence and the ruling stay with the proposal.
+    asset_proposals: TreeMap[str, str]
+    proposal_symbols: DynArray[str]
+    proposal_listed: TreeMap[str, str]
+
     portfolios: TreeMap[str, Portfolio]
     portfolio_ids: DynArray[str]
 
@@ -1002,46 +1067,183 @@ class SynthForgeVault(gl.Contract):
     def register_asset(self, symbol: str, name: str, kind: str, underlying: str, reference_url: str, price_path: str, risk_bucket: str, max_weight_bps: u256) -> str:
         if gl.message.sender_address != self.owner:
             raise gl.vm.UserError(f"{ERROR_EXPECTED} only the vault owner can register assets")
-        key = str(symbol).strip().upper()
-        if key == "" or len(key) > 16:
-            raise gl.vm.UserError(f"{ERROR_EXPECTED} invalid symbol")
-        for character in key:
-            if not (character.isalnum() or character == "-" or character == "_"):
-                raise gl.vm.UserError(f"{ERROR_EXPECTED} invalid symbol characters")
+        key = _asset_key(symbol)
         if key in self.assets:
             raise gl.vm.UserError(f"{ERROR_EXPECTED} asset already registered: {key}")
-        kind_key = str(kind).strip().upper()
-        if kind_key not in ("EQUITY", "COMMODITY", "FX", "CRYPTO", "INDEX", "RATE", "BASKET"):
-            raise gl.vm.UserError(f"{ERROR_EXPECTED} invalid asset kind: {kind_key}")
-        bucket = str(risk_bucket).strip().upper()
-        if bucket != "LOW" and bucket != "MEDIUM" and bucket != "HIGH":
-            raise gl.vm.UserError(f"{ERROR_EXPECTED} invalid risk bucket: {bucket}")
-        url = str(reference_url).strip()
-        if not url.startswith("https://") and not url.startswith("http://"):
-            raise gl.vm.UserError(f"{ERROR_EXPECTED} reference_url must be http(s)")
-        path = str(price_path).strip()
-        if path == "":
-            raise gl.vm.UserError(f"{ERROR_EXPECTED} price_path is required")
-        cap = int(max_weight_bps)
-        if cap <= 0 or cap > BPS:
-            raise gl.vm.UserError(f"{ERROR_EXPECTED} max_weight_bps must be within 1..10000")
-        if str(name).strip() == "" or str(underlying).strip() == "":
-            raise gl.vm.UserError(f"{ERROR_EXPECTED} name and underlying are required")
+        fields = _asset_fields(symbol, name, kind, underlying, reference_url, price_path, risk_bucket, max_weight_bps)
         self.assets[key] = SyntheticAsset(
             symbol=key,
-            name=str(name).strip(),
-            kind=kind_key,
-            underlying=str(underlying).strip(),
-            reference_url=url,
-            price_path=path,
-            risk_bucket=bucket,
-            max_weight_bps=u256(cap),
+            name=fields["name"],
+            kind=fields["kind"],
+            underlying=fields["underlying"],
+            reference_url=fields["reference_url"],
+            price_path=fields["price_path"],
+            risk_bucket=fields["risk_bucket"],
+            max_weight_bps=u256(fields["max_weight_bps"]),
             enabled=True,
             added_at=_now_iso(),
         )
         self.asset_symbols.append(key)
+        # A pending proposal for this symbol is now moot; close it instead of
+        # leaving a record that blocks the next proposal.
+        self._settle_pending_proposal(key, "registered directly by the owner")
         return key
 
+
+    # ------------------------------------------------------------------
+    # Asset registry proposals: anyone may propose, consensus verifies the
+    # feed, the owner carries the canonical decision.
+    # ------------------------------------------------------------------
+
+    def _proposal_json(self, key: str) -> dict:
+        if key not in self.asset_proposals:
+            raise gl.vm.UserError(f"{ERROR_EXPECTED} unknown asset proposal: {key}")
+        return json.loads(self.asset_proposals[key])
+
+    def _probe_feed(self, key: str, url: str, path: str) -> int:
+        # The probe answers one objective question: does this URL, read through
+        # this path, price something right now? Validators re-fetch and must
+        # agree within the tolerance the book uses at fill time, so a feed that
+        # merely looks plausible cannot pass on the leader's word alone.
+        spec = {"symbol": key, "url": url, "path": path}
+
+        def leader_fn():
+            return {"symbol": key, "price_atto": str(_fetch_price(spec))}
+
+        def validator_fn(leaders_res) -> bool:
+            if not isinstance(leaders_res, gl.vm.Return):
+                return _handle_leader_error(leaders_res, leader_fn)
+            try:
+                leader_price = int(leaders_res.calldata["price_atto"])
+            except Exception:
+                return False
+            try:
+                fresh = leader_fn()
+            except Exception:
+                return False
+            return _compare_prices({key: leader_price}, {key: int(fresh["price_atto"])})
+
+        probe = gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
+        return int(probe["price_atto"])
+
+    def _settle_pending_proposal(self, key: str, note: str) -> None:
+        if key not in self.asset_proposals:
+            return
+        record = json.loads(self.asset_proposals[key])
+        if record.get("status") != "PENDING":
+            return
+        record["status"] = "ACTIVE"
+        record["decided_at"] = _now_iso()
+        record["decided_by"] = self.owner.as_hex
+        record["note"] = note
+        self.asset_proposals[key] = json.dumps(record, sort_keys=True)
+
+    def _pending_proposal_count(self) -> int:
+        pending = 0
+        for symbol in self.proposal_symbols:
+            if symbol in self.asset_proposals:
+                if json.loads(self.asset_proposals[symbol]).get("status") == "PENDING":
+                    pending += 1
+        return pending
+
+    @gl.public.write
+    def propose_asset(self, symbol: str, name: str, kind: str, underlying: str, reference_url: str, price_path: str, risk_bucket: str, max_weight_bps: u256) -> str:
+        # Deliberately not owner-gated. The proposer carries no authority: the
+        # feed is fetched by the committee before the proposal is even recorded,
+        # and the owner decides whether it is the canonical source for the
+        # underlying. That decision is judgement, not something a validator set
+        # can compute.
+        if self.paused:
+            raise gl.vm.UserError(f"{ERROR_EXPECTED} vault is paused")
+        fields = _asset_fields(symbol, name, kind, underlying, reference_url, price_path, risk_bucket, max_weight_bps)
+        key = fields["symbol"]
+        if key in self.assets:
+            raise gl.vm.UserError(f"{ERROR_EXPECTED} asset already registered: {key}")
+        if key in self.asset_proposals:
+            if json.loads(self.asset_proposals[key]).get("status") == "PENDING":
+                raise gl.vm.UserError(f"{ERROR_EXPECTED} a proposal for {key} is already pending")
+        price = self._probe_feed(key, fields["reference_url"], fields["price_path"])
+        proposer = gl.message.sender_address
+        record = {
+            "symbol": key,
+            "name": fields["name"],
+            "kind": fields["kind"],
+            "underlying": fields["underlying"],
+            "reference_url": fields["reference_url"],
+            "price_path": fields["price_path"],
+            "risk_bucket": fields["risk_bucket"],
+            "max_weight_bps": fields["max_weight_bps"],
+            "status": "PENDING",
+            "proposed_by": proposer.as_hex,
+            "proposed_at": _now_iso(),
+            "probe_price_atto": str(price),
+            "probe_digest": _sha(key + "|" + fields["reference_url"] + "|" + fields["price_path"] + "|" + str(price)),
+            "decided_by": "",
+            "decided_at": "",
+            "note": "",
+        }
+        self.asset_proposals[key] = json.dumps(record, sort_keys=True)
+        if key not in self.proposal_listed:
+            self.proposal_symbols.append(key)
+            self.proposal_listed[key] = key
+        return json.dumps(record, sort_keys=True)
+
+    @gl.public.write
+    def activate_asset(self, symbol: str) -> str:
+        if gl.message.sender_address != self.owner:
+            raise gl.vm.UserError(f"{ERROR_EXPECTED} only the vault owner can activate a proposed asset")
+        key = _asset_key(symbol)
+        if key in self.assets:
+            raise gl.vm.UserError(f"{ERROR_EXPECTED} asset already registered: {key}")
+        record = self._proposal_json(key)
+        if record.get("status") != "PENDING":
+            raise gl.vm.UserError(f"{ERROR_EXPECTED} no pending proposal for {key}")
+        # Activation re-probes: a proposal may be days old, and the substance of
+        # the owner's decision is that the feed still answers now.
+        price = self._probe_feed(key, str(record["reference_url"]), str(record["price_path"]))
+        fields = _asset_fields(key, record["name"], record["kind"], record["underlying"], record["reference_url"], record["price_path"], record["risk_bucket"], record["max_weight_bps"])
+        asset = SyntheticAsset(
+            symbol=key,
+            name=fields["name"],
+            kind=fields["kind"],
+            underlying=fields["underlying"],
+            reference_url=fields["reference_url"],
+            price_path=fields["price_path"],
+            risk_bucket=fields["risk_bucket"],
+            max_weight_bps=u256(fields["max_weight_bps"]),
+            enabled=True,
+            added_at=_now_iso(),
+        )
+        self.assets[key] = asset
+        self.asset_symbols.append(key)
+        record["status"] = "ACTIVE"
+        record["decided_by"] = self.owner.as_hex
+        record["decided_at"] = _now_iso()
+        record["note"] = "activated by the owner after a fresh probe"
+        record["activation_price_atto"] = str(price)
+        record["activation_digest"] = _sha(key + "|activate|" + str(price))
+        self.asset_proposals[key] = json.dumps(record, sort_keys=True)
+        return json.dumps(self._asset_json(asset), sort_keys=True)
+
+    @gl.public.write
+    def reject_asset(self, symbol: str, note: str) -> str:
+        if gl.message.sender_address != self.owner:
+            raise gl.vm.UserError(f"{ERROR_EXPECTED} only the vault owner can reject a proposed asset")
+        key = _asset_key(symbol)
+        record = self._proposal_json(key)
+        if record.get("status") != "PENDING":
+            raise gl.vm.UserError(f"{ERROR_EXPECTED} no pending proposal for {key}")
+        note_text = str(note).strip()
+        if len(note_text) < MIN_REJECTION_CHARS:
+            raise gl.vm.UserError(f"{ERROR_EXPECTED} rejection note must say why, at least {MIN_REJECTION_CHARS} characters")
+        if len(note_text) > MAX_REJECTION_CHARS:
+            raise gl.vm.UserError(f"{ERROR_EXPECTED} rejection note is too long")
+        record["status"] = "REJECTED"
+        record["decided_by"] = self.owner.as_hex
+        record["decided_at"] = _now_iso()
+        record["note"] = note_text
+        self.asset_proposals[key] = json.dumps(record, sort_keys=True)
+        return json.dumps(record, sort_keys=True)
     @gl.public.write
     def set_asset_enabled(self, symbol: str, enabled: bool) -> None:
         if gl.message.sender_address != self.owner:
@@ -1205,9 +1407,10 @@ class SynthForgeVault(gl.Contract):
 
     @gl.public.write
     def generate_strategy(self, portfolio_id: str, thesis: str, horizon_days: u256) -> str:
-        # The leader proposes an allocation with an LLM. Validators rerun the same
-        # prompt independently and must agree on the regime, the asset set and a
-        # tolerance-bounded weight vector before the proposal becomes state.
+        # The leader proposes an allocation with an LLM. Every validator then
+        # checks the mandate itself: a known regime, known assets, the full budget
+        # spent and profile caps intact. A model that drifts in wording still
+        # lands, a book that breaks policy never does.
         if self.paused:
             raise gl.vm.UserError(f"{ERROR_EXPECTED} vault is paused")
         portfolio = self._require_portfolio(portfolio_id)
@@ -1234,7 +1437,7 @@ class SynthForgeVault(gl.Contract):
         def validator_fn(leaders_res) -> bool:
             if not isinstance(leaders_res, gl.vm.Return):
                 return _handle_leader_error(leaders_res, leader_fn)
-            return _compare_proposals(leaders_res.calldata, leader_fn())
+            return _proposal_respects_mandate(leaders_res.calldata, universe, profile)
 
         proposal = gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
         weights = proposal["weights"]
@@ -1569,14 +1772,16 @@ class SynthForgeVault(gl.Contract):
             "owner": self.owner.as_hex,
             "paused": bool(self.paused),
             "assets": len(self.asset_symbols),
+            "proposals": len(self.proposal_symbols),
+            "pending_proposals": self._pending_proposal_count(),
+            "min_rejection_chars": MIN_REJECTION_CHARS,
             "portfolios": len(self.portfolio_ids),
             "strategies": len(self.strategy_ids),
             "proofs": len(self.proof_ids),
             "bps": BPS,
             "atto": ATTO,
             "price_tolerance_bps": PRICE_TOLERANCE_BPS,
-            "max_weight_delta_bps": MAX_WEIGHT_DELTA_BPS,
-            "max_l1_delta_bps": MAX_L1_DELTA_BPS,
+            "validator_mode": "mandate-invariants",
             "min_reason_chars": MIN_REASON_CHARS,
             "caps": {
                 "CONSERVATIVE": {"max_single_bps": _max_single_bps("CONSERVATIVE"), "max_high_bps": _max_high_bps("CONSERVATIVE")},
@@ -1599,6 +1804,18 @@ class SynthForgeVault(gl.Contract):
     @gl.public.view
     def get_asset(self, symbol: str) -> str:
         return json.dumps(self._asset_json(self._require_asset(symbol)), sort_keys=True)
+
+    @gl.public.view
+    def list_asset_proposals(self) -> str:
+        rows = []
+        for symbol in self.proposal_symbols:
+            if symbol in self.asset_proposals:
+                rows.append(json.loads(self.asset_proposals[symbol]))
+        return json.dumps(rows, sort_keys=True)
+
+    @gl.public.view
+    def get_asset_proposal(self, symbol: str) -> str:
+        return json.dumps(self._proposal_json(_asset_key(symbol)), sort_keys=True)
 
     @gl.public.view
     def list_portfolios(self) -> str:

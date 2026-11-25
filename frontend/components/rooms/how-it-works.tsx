@@ -25,9 +25,10 @@ export default function HowItWorksRoom() {
       <Panel title="The claim" hint="read this before trusting a number on the other pages">
         <p className="cx-note" style={{ fontSize: 13.5 }}>
           SynthForge is a synthetic-asset vault whose decisions are made by a committee of GenLayer validators, not by
-          the page you are reading. Three separate things have to reach agreement: the allocation a model proposes, the
-          prices a fill is executed at, and the ruling a challenge receives. Each one is a separate consensus path with
-          its own equality rule, and each one leaves an execution proof carrying the exact inputs it ran on.
+          the page you are reading. Four separate things have to reach agreement: whether an instrument's feed answers
+          at all, the allocation a model proposes, the prices a fill is executed at, and the ruling a challenge
+          receives. Each one is a separate consensus path with its own rule, and each one that moves state leaves a
+          proof carrying the exact inputs it ran on.
         </p>
       </Panel>
 
@@ -43,9 +44,9 @@ export default function HowItWorksRoom() {
                 allocation as JSON. <b>No capital moves here.</b>
               </p>
               <ul className="cx-check">
-                <li>validators rerun the identical prompt, not the leader's answer</li>
-                <li>they must agree on regime, the symbol set, and every weight</li>
-                <li>the draft lands as PROPOSED with its digests and rationale</li>
+                <li>the leader proposes; validators recompute the mandate, they do not re-run the model</li>
+                <li>a book passes only if every leg is inside its cap and the budget is fully spent</li>
+                <li>the draft lands ACTIVE with its digests and rationale; nothing moves until executed</li>
               </ul>
             </div>
           </div>
@@ -69,9 +70,9 @@ export default function HowItWorksRoom() {
             <div>
               <h3>Execute</h3>
               <p>
-                The approved weights become positions at attested prices. Caps, the weight band and the L1 turnover
-                limit are enforced here, in Python, before any storage write. A REBALANCE proof records the target
-                weights and the turnover it cost.
+                The approved weights become positions at attested prices. Caps were already enforced before the book
+                was storable; what executes here is cash, units and NAV, in Python, before any storage write. A
+                REBALANCE proof records the target weights and the turnover it cost - measured, not a second gate.
               </p>
             </div>
           </div>
@@ -113,19 +114,19 @@ export default function HowItWorksRoom() {
       <div className="cx-split">
         <Panel title="Path 1 · strategy consensus" hint="the allocation itself">
           <p className="cx-note">
-            The proposal is the financially binding output, so the equality rule is numeric and tight. Two nodes agree
-            only if they pick the same regime, the same instrument set, and weights inside the band - and the total
-            disagreement across legs must also fit under the L1 limit. Anything looser would let two nodes store two
-            different books under one transaction.
+            The proposal is the financially binding output, so validators do not compare prose or even tickers twice:
+            they recompute the mandate. A book passes only if every leg sits inside its profile cap, the weights sum to
+            the full budget, and the regime is one the vault knows. A model that drifts in wording still lands; a book
+            that breaks policy never does.
           </p>
           <div style={{ marginTop: 14 }}>
             <KeyValue
               rows={[
-                ["per-leg band", info ? `${info.max_weight_delta_bps} bps` : "—"],
-                ["L1 band", info ? `${info.max_l1_delta_bps} bps` : "—"],
-                ["regime", "exact match"],
-                ["instrument set", "exact match"],
-                ["on mismatch", "round rotates, no state written"],
+                ["rule", info ? info.validator_mode : "—"],
+                ["budget", "each leg inside its cap, weights sum to 10,000 bps"],
+                ["regime", "RISK_ON · NEUTRAL · RISK_OFF"],
+                ["instrument set", "any subset of the attested universe"],
+                ["on a breach", "the round rotates, no state written"],
               ]}
             />
           </div>
@@ -187,6 +188,41 @@ export default function HowItWorksRoom() {
               <li>at most three codes, so evidence stays readable</li>
               <li>if policy already found a breach, the ruling is REVOKE regardless of the model</li>
             </ul>
+          </div>
+        </div>
+      </Panel>
+
+      <Panel title="Path 4 · registry probe" hint="the instrument has to exist first">
+        <p className="cx-note">
+          Filing a symbol is permissionless, but nothing is stored on a promise. <code>propose_asset</code> fetches the
+          reference feed inside consensus before the record exists: a 404, a body that is not JSON, or a dot path that
+          misses the print aborts the call with the contract's own error. Activation re-probes, because a filing can be
+          days old and the owner's claim is that the feed still answers now. The owner decides whether the source is
+          canonical - a judgement no validator set can compute - and the queue keeps the proposer, the probe price and
+          the written reason either way.
+        </p>
+        <div className="cx-grid two" style={{ marginTop: 16 }}>
+          <div>
+            <div className="cx-hint" style={{ marginBottom: 8 }}>
+              who may do what
+            </div>
+            <ul className="cx-check">
+              <li>any wallet: file a symbol, with its feed and JSON path</li>
+              <li>the committee: fetch it and agree on the print, or refuse to store</li>
+              <li>the owner: activate (re-probed) or reject with a note of 12+ characters</li>
+              <li>everyone: read the whole queue, decisions included</li>
+            </ul>
+          </div>
+          <div>
+            <KeyValue
+              rows={[
+                ["gate", "consensus probe, any wallet"],
+                ["tolerance", info ? `${info.price_tolerance_bps} bps on the attested price` : "—"],
+                ["decision", "owner activation or a written rejection"],
+                ["on a dead feed", "[EXTERNAL] 404, no proposal record written"],
+                ["on a repeat", "[EXPECTED] already registered / already pending"],
+              ]}
+            />
           </div>
         </div>
       </Panel>

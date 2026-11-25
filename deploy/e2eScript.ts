@@ -101,7 +101,7 @@ async function main() {
   const info = await driver.readJson(address, "get_system_info");
   if (Number(info.assets) === 0) fail("preflight", "the vault has no registered assets; run deploy/deployScript.ts first");
   console.log(`universe   ${info.assets} assets · ${info.proofs} proofs · v${info.version}`);
-  console.log(`consensus  weight band ${info.max_weight_delta_bps} bps · L1 ${info.max_l1_delta_bps} bps · prices ${info.price_tolerance_bps} bps`);
+  console.log(`consensus  ${info.validator_mode} · prices ${info.price_tolerance_bps} bps · ${info.pending_proposals} proposals open`);
 
   const book = await driver.readJson(address, "list_portfolios");
   const portfolioId = book[0]?.portfolio_id;

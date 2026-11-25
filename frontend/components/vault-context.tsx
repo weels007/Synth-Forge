@@ -75,7 +75,7 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
       hasData.current = true;
       setError(null);
     } catch (loadError) {
-      // A snapshot costs six reads; a public node that rate-limits a poll must
+      // A snapshot costs seven reads; a public node that rate-limits a poll must
       // not blank a book that was already on screen.
       if (!hasData.current) setError(message(loadError));
     } finally {

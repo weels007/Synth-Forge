@@ -303,6 +303,16 @@
 .cx-field textarea { min-height: 88px; resize: vertical; line-height: 1.6; }
 .cx-field small { font-family: var(--c-mono); font-size: 9.5px; color: var(--c-faint); }
 .cx-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.cx-queue { display: grid; gap: 10px; padding: 0 14px 14px; }
+.cx-queue-row { display: flex; gap: 14px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; padding: 12px; border: 1px solid var(--c-rule); border-radius: 10px; background: rgba(3, 9, 11, 0.35); }
+.cx-queue-main { display: grid; gap: 6px; flex: 1 1 320px; min-width: 0; }
+.cx-queue-meta { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-family: var(--c-mono); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--c-faint); }
+.cx-queue-sub { display: grid; gap: 3px; min-width: 0; }
+.cx-queue-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.cx-queue-actions input { padding: 8px 10px; border: 1px solid var(--c-rule-strong); border-radius: 8px; background: rgba(3, 9, 11, 0.6); color: var(--c-text); font-family: var(--c-mono); font-size: 10.5px; outline: none; }
+.cx-queue-actions input:focus { border-color: rgba(95, 224, 172, 0.6); }
+.cx-queue .sym { display: block; font-family: var(--c-mono); font-size: 12px; letter-spacing: 0.04em; }
+.cx-queue .sub { display: block; margin-top: 3px; font-family: var(--c-mono); font-size: 10px; color: var(--c-faint); }
 
 .cx-pre {
   margin: 0;

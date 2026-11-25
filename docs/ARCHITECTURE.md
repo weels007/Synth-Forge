@@ -11,6 +11,8 @@ policy pipeline, the money math, and the invariants the test suite is written ag
 | `paused` | `bool` | circuit breaker checked at the top of every write |
 | `asset_symbols` | `DynArray[str]` | insertion order = display order |
 | `assets` | `TreeMap[str, SyntheticAsset]` | symbol → instrument |
+| `proposal_symbols` | `DynArray[str]` | every symbol ever filed, in filing order |
+| `asset_proposals` | `TreeMap[str, str]` | symbol → JSON proposal record (status, probe, decision) |
 | `portfolio_ids` | `DynArray[str]` | `PF-0001`, `PF-0002`, … |
 | `portfolios` | `TreeMap[str, Portfolio]` | id → vault |
 | `strategy_ids` | `DynArray[str]` | `ST-0001`, … |
@@ -40,6 +42,15 @@ strategy wanted, `positions` is the units actually bought. `get_positions` repor
 `weight_bps` (from `book_weights`) and `units_atto` (from `positions`) so a rebalance can be
 diffed against what it intended to do.
 
+**The registry separates facts from judgement.** `propose_asset` is not owner-gated, but it
+stores nothing until a consensus probe fetches the reference feed and the validators agree on
+the print; `activate_asset` re-probes before the symbol joins the universe; `reject_asset`
+requires a written note. Each proposal keeps the proposer, the probe price and digest, and the
+owner's decision with its note, so permissionless filing never becomes anonymous authority:
+the part a validator set can compute (does this feed answer, and with what number?) is
+computed, and the part it cannot compute (is this the canonical source for this underlying?)
+is signed by the owner and left on the record.
+
 ## 2. The nondeterministic boundary
 
 Only three methods touch the network or a model:
@@ -65,11 +76,27 @@ def leader_fn():
 def validator_fn(leaders_res) -> bool:
     if not isinstance(leaders_res, gl.vm.Return):
         return _handle_leader_error(leaders_res, leader_fn)
-    return _compare_proposals(leaders_res.calldata, leader_fn())
+    return _proposal_respects_mandate(leaders_res.calldata, universe, profile)
 
 proposal = gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
 # ... only now does the contract write
 ```
+
+**The validator does not re-run the model.** The first design did: validator and leader both
+asked the model, and the two books had to sit within 500 bps per leg. On live Studionet that
+failed in the honest case - the leader produced a legal book, the validator's independent
+sample landed somewhere else, and the round closed Undetermined with votes `DISAGREE, IDLE`
+while nothing was wrong with the proposal. Two samples of a stochastic model are not the same
+computation, so comparing them is not an equivalence principle.
+
+The rule is now stated over the *book*, not the model. `_proposal_respects_mandate` recomputes
+what the mandate requires and accepts any proposal that already satisfies it: a known regime,
+at least two legs, every leg drawn from the pinned universe, weights summing to exactly
+10 000 bps, a confidence in `0..10 000`, and `_apply_caps(weights) == weights` - the caps are
+already binding, so redistribution has nothing left to do. A leader can therefore choose
+*among* legal books but can never store an illegal one, and validators no longer need to
+reproduce a sample to prove it. The trade is explicit: the committee polices policy, not the
+specific allocation, which is the property the product actually needs.
 
 Only the adjudication path adds work *outside* the closure: `_policy_breaches` computes the
 objective breaches from the allocation before the model is asked anything, and the resulting
@@ -135,7 +162,8 @@ dust can never accumulate into a phantom balance. The direct tests assert to wit
 1. reject if paused, unknown portfolio/strategy, strategy not `PROPOSED`/`ACTIVE`
 2. pin the universe (enabled instruments only) and the target weights
 3. **consensus**: fetch every feed inside `run_nondet_unsafe`, compare maps at 150 bps
-4. compute the new book and its total turnover; reject above `MAX_L1_DELTA_BPS` (1200 bps)
+4. compute the new book and its realised turnover - a measurement recorded on the proof, not a
+   second gate: the weights were capped before they were ever storable
 5. book it: `units = weight * nav // BPS // price`, subtract cash, store `positions`,
 
    `book_weights`, `held_symbols`, bump `rebalances`, set strategy `ACTIVE`, portfolio `LIVE`
@@ -220,7 +248,9 @@ original execution record — it adds a new row that names the same `strategy_id
 | NAV is conserved across a rebalance (± dust) | `test_execution_and_marks.py` |
 | nothing moves after `set_paused(True)` | `test_registry_and_portfolios.py` |
 | only the owner can register / pause / transfer | `test_registry_and_portfolios.py` |
-| a validator that disagrees beyond 500 bps per leg rejects the leader | `test_strategy_engine.py` |
+| a validator accepts a differently worded but legal book, and rejects one that breaks a cap or leaves budget unspent | `test_strategy_engine.py` |
+| any wallet may file a proposal, but a failed probe stores nothing | `test_registry_proposals.py` |
+| only the owner activates or rejects, and a rejection needs a real note | `test_registry_proposals.py` |
 | a `REVOKE` ruling clears `active_strategy_id` and sets `REVIEW` | `test_challenges_and_proofs.py` |
 | a strategy is adjudicated at most once | `test_challenges_and_proofs.py` |
 | every mutation appends exactly one proof | `test_challenges_and_proofs.py` |
@@ -241,6 +271,10 @@ original execution record — it adds a new row that names the same `strategy_id
 | model cites a made-up ground | dropped by the vocabulary filter on every node, ruling still converges |
 | model wants to uphold a book that breaches a cap | `_policy_breaches` overrides, `REVOKE` is stored |
 | strategy already adjudicated | `[EXPECTED] strategy already adjudicated`, no second ruling |
+| proposal feed 404s | `[EXTERNAL] feed rejected the request (404)`, no proposal record written |
+| proposal for a symbol that is already live | `[EXPECTED] asset already registered`, nothing changes |
+| second proposal while one is pending | `[EXPECTED] a proposal ... is already pending` |
+| activation of a proposal that no longer exists | `[EXPECTED] no pending proposal`, nothing changes |
 
 ## 10. What is deliberately not real
 
@@ -256,7 +290,11 @@ touch the consensus closures.
 
 ## 11. Owner powers
 
-The owner can register instruments, disable one, pause every write, and transfer ownership.
+The owner can register instruments directly, activate or reject a filed proposal (a rejection
+must carry a note of at least 12 characters), disable one, pause every write, and transfer
+ownership. It cannot decide *whether a feed answers* - that is probed inside consensus before
+any proposal exists - and it cannot quietly bury a filing: the proposal row stays visible with
+its proposer, probe price and the owner's note.
 It cannot: mint shares, move a portfolio's positions, execute a strategy on someone else's
 portfolio (execution is open to anyone — the contract enforces the mandate, not the caller),
 or delete a proof. `transfer_ownership` is single-step and takes effect immediately; a
