@@ -9,6 +9,9 @@ venv/
 # GenLayer
 artifacts/
 .wallet.json
+# Keys never live in the repo; the keystores sit in ../wallet.
+*-keystore.json
+*.password
 # deployments.json is committed on purpose: it is the canonical seeded address.
 
 # Node / frontend
