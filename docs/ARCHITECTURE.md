@@ -290,3 +290,10 @@ The address is resolved from `frontend/public/deployment.json`, written by the d
 deployment than the one the repository documents.
 
 `preview_prompt` is surfaced in the UI on purpose: the prompt is part of the product surface.
+
+Deployment needs no server. Every route prerenders, and the only runtime work is a fetch of
+`public/deployment.json` for the contract address plus whatever the visitor's browser reads
+from Studionet, so the site holds no secrets and reads no environment configuration beyond
+the `NEXT_PUBLIC_SYNTHFORGE_ADDRESS` override. On Vercel the repository is imported with
+`frontend` as the root directory; `frontend/vercel.json` adds nothing but long-lived caching
+for the self-hosted fonts.

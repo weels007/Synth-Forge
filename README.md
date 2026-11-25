@@ -319,6 +319,29 @@ Reads work without a wallet. Writes need one, and every write notice distinguish
 `ACCEPTED` from `FINALIZED`, because a Studionet receipt that has not closed its appeal
 window is not a settled transaction.
 
+### Deploy on Vercel
+
+The dashboard is the `frontend/` directory, so Vercel has to be told which directory is the app:
+
+1. [Import the repository](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fweels007%2FSynth-Forge&root-directory=frontend&project-name=synthforge),
+   or open Vercel and use **Add New -> Project** on the same repository.
+2. Set **Root Directory** to `frontend`. The framework is then detected as Next.js; leave the
+   install, build and output commands alone.
+3. Deploy. There is nothing else to configure.
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fweels007%2FSynth-Forge&root-directory=frontend&project-name=synthforge)
+
+No environment variables are required. The address the dashboard reads is pinned in
+`frontend/public/deployment.json`, which the deploy script writes and the browser fetches at
+load; `NEXT_PUBLIC_SYNTHFORGE_ADDRESS` exists only as an override for pointing the dashboard at
+a different deployment. Nothing in the build needs a secret, a database or a server, so a
+preview deployment reads the same live book as production.
+
+Two things change once it is public. Reads go from the visitor's browser straight to the
+Studionet RPC, which caps a client at 500 requests an hour, so a busy page can hit that ceiling
+before it hits a bug. And writes still need an injected wallet on chain 61999 - the deployed
+site is a reader for anyone who arrives without one.
+
 ## Repository map
 
 ```
